@@ -1,0 +1,72 @@
+{
+  "name": "fliperama",
+  "version": "0.1.6",
+  "description": "Fliperama — hub Electron com launchers via Wine e jogos via UMU/Proton",
+  "main": "./out/main/index.js",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "dist": "electron-vite build && electron-builder --linux AppImage",
+    "publish:server": "bash scripts/publish-server.sh",
+    "publish:site": "bash scripts/publish-site.sh"
+  },
+  "build": {
+    "appId": "com.fliperama.fliperama",
+    "productName": "Fliperama",
+    "directories": {
+      "output": "release"
+    },
+    "artifactName": "Fliperama-${version}.${ext}",
+    "files": [
+      "out/**",
+      "src/renderer/assets/logo/fliperama_icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "src/renderer/assets/logo/fliperama_icon.png",
+        "to": "fliperama_icon.png"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Game",
+      "icon": "src/renderer/assets/logo/fliperama_icon_512.png",
+      "synopsis": "Hub de launchers e jogos",
+      "description": "Fliperama — gerencia launchers via Wine e jogos via UMU/Proton."
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://fliperama.top/files/fliperama/"
+      }
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.3.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^2.3.0",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.14"
+  },
+  "allowScripts": {
+    "electron@31.7.7": true,
+    "esbuild@0.21.5": true,
+    "electron-builder@26.15.3": true
+  }
+}
