@@ -2,6 +2,7 @@ import { execFile } from "node:child_process"
 import { readFileSync, rmSync } from "node:fs"
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
+import { BrowserWindow, shell } from "electron"
 import * as backends from "./backends"
 import { getValidGogToken, invalidateGogTokenCache } from "./gogToken"
 
@@ -134,6 +135,150 @@ export async function completeAuth(store: Store, codeOrUrl: string): Promise<voi
   if (!authStatusEpicConnected()) {
     throw new Error("login Epic falhou — código inválido, expirado ou já utilizado (códigos da Epic valem ~5min e são de uso único); gere um novo")
   }
+}
+
+// ---- login interativo (janela embutida, sem copiar/colar) ----
+
+// Janela de login embutida (modal sobre a janela do Fliperama). Popups
+// (window.open) são negados e abertos no navegador do sistema — o fluxo de
+// login GOG/Epic é de janela única, então isso não atrapalha.
+function openAuthWindow(url: string, title: string): BrowserWindow {
+  const parent = BrowserWindow.getFocusedWindow() ?? undefined
+  const win = new BrowserWindow({
+    width: 940,
+    height: 740,
+    parent,
+    modal: true,
+    autoHideMenuBar: true,
+    title,
+    show: false,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+  win.on("ready-to-show", () => win.show())
+  win.webContents.setWindowOpenHandler(({ url: target }) => {
+    void shell.openExternal(target)
+    return { action: "deny" }
+  })
+  return win
+}
+
+const AUTH_WINDOW_CLOSED = "login cancelado — janela fechada"
+
+// GOG: o redirect final traz `embed.gog.com/on_login_success?code=...`.
+// Captura em did-navigate/will-redirect (e will-navigate para redirects via JS).
+function waitForGogCode(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const win = openAuthWindow(url, "GOG — login")
+    let done = false
+    const cleanup = (): void => {
+      win.webContents.removeListener("did-navigate", onNavigate)
+      win.webContents.removeListener("will-redirect", onNavigate)
+      win.webContents.removeListener("will-navigate", onNavigate)
+    }
+    const finish = (code: string): void => {
+      if (done) return
+      done = true
+      cleanup()
+      try {
+        win.destroy()
+      } catch {
+        // já destruída
+      }
+      resolve(code)
+    }
+    const fail = (msg: string): void => {
+      if (done) return
+      done = true
+      cleanup()
+      try {
+        win.destroy()
+      } catch {
+        // já destruída
+      }
+      reject(new Error(msg))
+    }
+    const onNavigate = (_e: Electron.Event, target: string): void => {
+      const m = /[?&]code=([^&\s]+)/.exec(target)
+      if (m) finish(decodeURIComponent(m[1]))
+    }
+    win.webContents.on("did-navigate", onNavigate)
+    win.webContents.on("will-redirect", onNavigate)
+    win.webContents.on("will-navigate", onNavigate)
+    win.on("closed", () => fail(AUTH_WINDOW_CLOSED))
+    void win.loadURL(url)
+  })
+}
+
+// Epic (legendary.gl/epiclogin): após o login, a página exibe o
+// authorizationCode (JSON ou texto). Faz polling do conteúdo da página.
+function waitForEpicCode(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const win = openAuthWindow(url, "Epic — login")
+    let done = false
+    let timer: ReturnType<typeof setInterval>
+    const finish = (code: string): void => {
+      if (done) return
+      done = true
+      clearInterval(timer)
+      try {
+        win.destroy()
+      } catch {
+        // já destruída
+      }
+      resolve(code)
+    }
+    const fail = (msg: string): void => {
+      if (done) return
+      done = true
+      clearInterval(timer)
+      try {
+        win.destroy()
+      } catch {
+        // já destruída
+      }
+      reject(new Error(msg))
+    }
+    const tryRead = async (): Promise<void> => {
+      try {
+        const text = (await win.webContents.executeJavaScript("document?.body?.innerText ?? ''")) as string
+        if (!text) return
+        const m = /\bauthorizationCode\b["']?\s*[:=]\s*["']?([A-Za-z0-9_-]+)/.exec(text)
+        if (m) {
+          finish(m[1])
+          return
+        }
+        const t = text.trim()
+        if (t.startsWith("{")) {
+          try {
+            const j = JSON.parse(t) as { authorizationCode?: string }
+            if (j.authorizationCode) finish(j.authorizationCode)
+          } catch {
+            // não-JSON
+          }
+        }
+      } catch {
+        // página ainda não pronta para executeJavaScript
+      }
+    }
+    win.webContents.on("did-navigate", () => void tryRead())
+    win.webContents.on("did-finish-load", () => void tryRead())
+    timer = setInterval(() => void tryRead(), 700)
+    win.on("closed", () => fail(AUTH_WINDOW_CLOSED))
+    void win.loadURL(url)
+  })
+}
+
+// Fluxo de login completo num BrowserWindow embutido (sem copiar/colar):
+// abre o login → captura o código → troca por token → devolve o status.
+export async function loginInteractive(store: Store): Promise<AuthStatus> {
+  const info = loginUrl(store)
+  const code = store === "gog" ? await waitForGogCode(info.url) : await waitForEpicCode(info.url)
+  await completeAuth(store, code)
+  return authStatus(store)
 }
 
 export function logout(store: Store): void {

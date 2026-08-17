@@ -1,0 +1,266 @@
+/*
+ * Fliperama Design Tokens
+ * Source of truth: /home/carpeta/Backup/Projects/fliperama-site/styles.css
+ * Values in the primitive section are literal extractions. Do not approximate.
+ */
+
+:root {
+  /* Brand and base colors — landing :root */
+  --fl-color-bg: #07050d;
+  --fl-color-bg-alt: #100819;
+  --fl-color-panel: rgba(17, 11, 29, 0.82);
+  --fl-color-text: #f8f7ff;
+  --fl-color-muted: #a9a0ba;
+  --fl-color-pink: #ff0fae;
+  --fl-color-purple: #7f26ff;
+  --fl-color-cyan: #18d7ff;
+  --fl-color-yellow: #ffe000;
+  --fl-color-line: rgba(255, 255, 255, 0.08);
+
+  /* Additional solid colors — literal landing inventory */
+  --fl-color-black-violet-950: #06040b;
+  --fl-color-black-violet-900: #08060d;
+  --fl-color-black-violet-850: #09050f;
+  --fl-color-black-violet-800: #0b0910;
+  --fl-color-cyan-bright: #20e3ff;
+  --fl-color-violet-glow: #24102f;
+  --fl-color-neutral-01: #62576f;
+  --fl-color-purple-deep: #6d19ff;
+  --fl-color-neutral-02: #6d6177;
+  --fl-color-purple-alt: #6e2bff;
+  --fl-color-neutral-03: #74697f;
+  --fl-color-success-landing: #75e9b6;
+  --fl-color-purple-gradient: #7d21ff;
+  --fl-color-neutral-04: #81758d;
+  --fl-color-neutral-05: #84798e;
+  --fl-color-neutral-06: #857a90;
+  --fl-color-neutral-07: #86798f;
+  --fl-color-neutral-08: #8a7e95;
+  --fl-color-neutral-09: #8b7f98;
+  --fl-color-neutral-10: #8d819c;
+  --fl-color-neutral-11: #9b8ca9;
+  --fl-color-neutral-12: #9b8fa7;
+  --fl-color-neutral-13: #9b8fa8;
+  --fl-color-cyan-soft: #9bd7ff;
+  --fl-color-neutral-14: #bdb3ca;
+  --fl-color-purple-soft: #c8b3ff;
+  --fl-color-neutral-15: #d9cbe8;
+  --fl-color-neutral-16: #ddd1e7;
+  --fl-color-pink-light: #ff4a95;
+  --fl-color-orange: #ff6a00;
+  --fl-color-orange-light: #ff903b;
+  --fl-color-peach: #ffb38f;
+  --fl-color-yellow-deep: #ffce00;
+  --fl-color-yellow-bright: #ffe500;
+  --fl-color-white: #fff;
+  --fl-color-yellow-highlight: #fff2a2;
+
+  /* Black transparencies */
+  --fl-black-a00: rgba(0, 0, 0, 0);
+  --fl-black-a28: rgba(0, 0, 0, 0.28);
+  --fl-black-a35: rgba(0, 0, 0, 0.35);
+
+  /* Dark surface transparencies */
+  --fl-dark-6-5-12-a44: rgba(6, 5, 12, 0.44);
+  --fl-dark-7-5-13-a62: rgba(7, 5, 13, 0.62);
+  --fl-dark-7-5-13-a96: rgba(7, 5, 13, 0.96);
+  --fl-dark-8-5-13-a82: rgba(8, 5, 13, 0.82);
+  --fl-dark-10-6-16-a65: rgba(10, 6, 16, 0.65);
+  --fl-dark-10-6-16-a92: rgba(10, 6, 16, 0.92);
+  --fl-dark-10-7-17-a78: rgba(10, 7, 17, 0.78);
+
+  /* Success transparencies */
+  --fl-success-a03: rgba(117, 233, 182, 0.03);
+  --fl-success-a08: rgba(117, 233, 182, 0.08);
+  --fl-success-a10: rgba(117, 233, 182, 0.1);
+  --fl-success-a12: rgba(117, 233, 182, 0.12);
+
+  /* Purple transparencies */
+  --fl-purple-a07: rgba(127, 38, 255, 0.07);
+  --fl-purple-a12: rgba(127, 38, 255, 0.12);
+  --fl-purple-a15: rgba(127, 38, 255, 0.15);
+  --fl-purple-a16: rgba(127, 38, 255, 0.16);
+  --fl-purple-a24: rgba(127, 38, 255, 0.24);
+
+  /* Cyan transparencies */
+  --fl-cyan-a045: rgba(24, 215, 255, 0.045);
+  --fl-cyan-a08: rgba(24, 215, 255, 0.08);
+  --fl-cyan-a12: rgba(24, 215, 255, 0.12);
+  --fl-cyan-a20: rgba(24, 215, 255, 0.2);
+  --fl-cyan-a30: rgba(24, 215, 255, 0.3);
+
+  /* Pink transparencies */
+  --fl-pink-255-0-170-a20: rgba(255, 0, 170, 0.2);
+  --fl-pink-a045: rgba(255, 15, 174, 0.045);
+  --fl-pink-a05: rgba(255, 15, 174, 0.05);
+  --fl-pink-a06: rgba(255, 15, 174, 0.06);
+  --fl-pink-a08: rgba(255, 15, 174, 0.08);
+  --fl-pink-a14: rgba(255, 15, 174, 0.14);
+  --fl-pink-a15: rgba(255, 15, 174, 0.15);
+  --fl-pink-a16: rgba(255, 15, 174, 0.16);
+  --fl-pink-a17: rgba(255, 15, 174, 0.17);
+  --fl-pink-a20: rgba(255, 15, 174, 0.2);
+  --fl-pink-a22: rgba(255, 15, 174, 0.22);
+  --fl-pink-a24: rgba(255, 15, 174, 0.24);
+  --fl-pink-a45: rgba(255, 15, 174, 0.45);
+  --fl-pink-255-18-180-a20: rgba(255, 18, 180, 0.2);
+  --fl-pink-255-30-174-a35: rgba(255, 30, 174, 0.35);
+
+  /* Yellow transparencies */
+  --fl-yellow-a09: rgba(255, 224, 0, 0.09);
+  --fl-yellow-a14: rgba(255, 224, 0, 0.14);
+
+  /* White transparencies */
+  --fl-white-a018: rgba(255, 255, 255, 0.018);
+  --fl-white-a02: rgba(255, 255, 255, 0.02);
+  --fl-white-a025: rgba(255, 255, 255, 0.025);
+  --fl-white-a03: rgba(255, 255, 255, 0.03);
+  --fl-white-a04: rgba(255, 255, 255, 0.04);
+  --fl-white-a05: rgba(255, 255, 255, 0.05);
+  --fl-white-a06: rgba(255, 255, 255, 0.06);
+  --fl-white-a07: rgba(255, 255, 255, 0.07);
+  --fl-white-a08: rgba(255, 255, 255, 0.08);
+  --fl-white-a09: rgba(255, 255, 255, 0.09);
+  --fl-white-a10: rgba(255, 255, 255, 0.1);
+  --fl-white-a12: rgba(255, 255, 255, 0.12);
+  --fl-white-a14: rgba(255, 255, 255, 0.14);
+  --fl-white-a15: rgba(255, 255, 255, 0.15);
+
+  /* Gradients — literal landing compositions */
+  --fl-gradient-page: radial-gradient(circle at 50% -15%, #24102f 0, transparent 35%), linear-gradient(180deg, #08060d, #09050f 45%, #06040b);
+  --fl-gradient-brand: linear-gradient(90deg, #ff0fae, #7f26ff);
+  --fl-gradient-spectrum: linear-gradient(90deg, #ffe000 0%, #ff6a00 25%, #ff0fae 60%, #18d7ff 100%);
+  --fl-gradient-progress: linear-gradient(90deg, #ff0fae, #18d7ff, #ffe000);
+  --fl-gradient-panel: linear-gradient(145deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.018));
+  --fl-gradient-panel-brand: linear-gradient(145deg, rgba(127, 38, 255, 0.15), rgba(255, 15, 174, 0.05) 65%, rgba(255, 255, 255, 0.02));
+  --fl-gradient-active: linear-gradient(90deg, rgba(255, 15, 174, 0.14), rgba(127, 38, 255, 0.07));
+  --fl-gradient-active-strong: linear-gradient(90deg, rgba(255, 15, 174, 0.2), rgba(127, 38, 255, 0.16));
+  --fl-gradient-cover-overlay: linear-gradient(180deg, transparent 40%, rgba(0, 0, 0, 0.35));
+  --fl-gradient-banner-overlay: linear-gradient(180deg, transparent 30%, #07050d);
+  --fl-gradient-panel-deep: linear-gradient(180deg, rgba(17, 11, 29, 0.82), #07050d 100%);
+  --fl-gradient-launcher-overlay: linear-gradient(180deg, transparent 35%, rgba(0, 0, 0, 0.35));
+  --fl-gradient-store-hero: linear-gradient(115deg, rgba(255, 15, 174, 0.16), rgba(127, 38, 255, 0.12) 50%, rgba(24, 215, 255, 0.08));
+
+  /* Spacing — all unique values used by gap/padding/margin in landing */
+  --fl-space-0: 0;
+  --fl-space-1: 4px;
+  --fl-space-2: 5px;
+  --fl-space-3: 6px;
+  --fl-space-4: 7px;
+  --fl-space-5: 8px;
+  --fl-space-6: 9px;
+  --fl-space-7: 10px;
+  --fl-space-8: 11px;
+  --fl-space-9: 12px;
+  --fl-space-10: 13px;
+  --fl-space-11: 14px;
+  --fl-space-12: 15px;
+  --fl-space-13: 16px;
+  --fl-space-14: 17px;
+  --fl-space-15: 18px;
+  --fl-space-16: 19px;
+  --fl-space-17: 20px;
+  --fl-space-18: 22px;
+  --fl-space-19: 24px;
+  --fl-space-20: 25px;
+  --fl-space-21: 28px;
+  --fl-space-22: 30px;
+  --fl-space-23: 34px;
+  --fl-space-24: 35px;
+  --fl-space-25: 36px;
+  --fl-space-26: 38px;
+  --fl-space-27: 40px;
+  --fl-space-28: 42px;
+  --fl-space-29: 48px;
+  --fl-space-30: 50px;
+  --fl-space-31: 55px;
+  --fl-space-32: 60px;
+  --fl-space-33: 65px;
+  --fl-space-34: 80px;
+  --fl-space-35: 82px;
+  --fl-space-36: 90px;
+  --fl-space-37: 115px;
+  --fl-space-38: 120px;
+  --fl-space-page-inline: 5vw;
+
+  /* Radius — all unique landing values */
+  --fl-radius-10: 10px;
+  --fl-radius-11: 11px;
+  --fl-radius-12: 12px;
+  --fl-radius-13: 13px;
+  --fl-radius-14: 14px;
+  --fl-radius-15: 15px;
+  --fl-radius-16: 16px;
+  --fl-radius-18: 18px;
+  --fl-radius-24: 24px;
+  --fl-radius-26: 26px;
+  --fl-radius-28: 28px;
+  --fl-radius-30: 30px;
+  --fl-radius-pill: 999px;
+  --fl-radius-round: 50%;
+
+  /* Typography */
+  --fl-font-interface: "Inter", system-ui, sans-serif;
+  --fl-font-display: "Bebas Neue", sans-serif;
+
+  /* Shadows and effects — literal landing values */
+  --fl-shadow-default: 0 20px 80px rgba(0, 0, 0, 0.35);
+  --fl-shadow-panel: 0 40px 100px rgba(0, 0, 0, 0.28);
+  --fl-shadow-toast: 0 18px 50px rgba(0, 0, 0, 0.35);
+  --fl-shadow-brand: 0 12px 35px rgba(127, 38, 255, 0.24);
+  --fl-shadow-brand-hover: 0 15px 42px rgba(255, 15, 174, 0.24);
+  --fl-shadow-brand-icon: 0 20px 55px rgba(255, 15, 174, 0.2);
+  --fl-shadow-logo-filter: 0 0 12px rgba(255, 18, 180, 0.2);
+  --fl-focus-control: 0 0 0 2px rgba(24, 215, 255, 0.2);
+  --fl-glow-success-12: 0 0 12px #75e9b6;
+  --fl-glow-success-14: 0 0 14px #75e9b6;
+  --fl-glow-cyan-16: 0 0 16px #18d7ff;
+  --fl-glow-cyan-18: 0 0 18px rgba(24, 215, 255, 0.3);
+  --fl-glow-purple-status: 0 0 6px #7f26ff;
+  --fl-glow-cyan-status: 0 0 6px #18d7ff;
+  --fl-outline-card-hover: 0 0 0 1px rgba(255, 15, 174, 0.24);
+  --fl-outline-card-selected: 0 0 0 1px #ff0fae, 0 0 18px rgba(255, 15, 174, 0.16);
+  --fl-text-shadow-title: 0 0 28px rgba(255, 15, 174, 0.16);
+
+  /* Tracking */
+  --fl-tracking-label: 0.1em;
+  --fl-tracking-display: 0.02em;
+
+  /* Font weights */
+  --fl-font-weight-display: 400;
+
+  /* Motion */
+  --fl-duration-quick: 0.15s;
+  --fl-duration-fast: 0.2s;
+  --fl-duration-normal: 0.25s;
+  --fl-duration-panel: 0.28s;
+  --fl-duration-progress: 0.35s;
+  --fl-duration-reveal: 0.7s;
+  --fl-ease-standard: ease;
+  --fl-ease-in-out: ease-in-out;
+
+  /* Semantic aliases — application-facing API */
+  --fl-surface-app: var(--fl-color-bg);
+  --fl-surface-app-alt: var(--fl-color-bg-alt);
+  --fl-surface-panel: var(--fl-color-panel);
+  --fl-surface-subtle: var(--fl-white-a025);
+  --fl-content-primary: var(--fl-color-text);
+  --fl-content-secondary: var(--fl-color-muted);
+  --fl-border-subtle: var(--fl-color-line);
+  --fl-border-control: var(--fl-white-a10);
+  --fl-accent-brand: var(--fl-color-pink);
+  --fl-accent-secondary: var(--fl-color-purple);
+  --fl-accent-info: var(--fl-color-cyan);
+  --fl-accent-highlight: var(--fl-color-yellow);
+  --fl-state-success: var(--fl-color-success-landing);
+  --fl-focus-ring: var(--fl-color-cyan);
+}
+
+/* Application semantic extension — not extracted from landing.
+ * Kept separate because the landing does not define destructive/error colors.
+ */
+:root {
+  --fl-state-danger: #ff5555;
+  --fl-state-danger-soft: rgba(255, 85, 85, 0.12);
+  --fl-state-danger-hover: rgba(255, 85, 85, 0.2);
+}

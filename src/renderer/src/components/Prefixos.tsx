@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useStore } from "../store"
 import { useI18n } from "../i18n/useI18n"
 
@@ -8,20 +8,48 @@ export default function Prefixos(): JSX.Element {
   const refresh = useStore((s) => s.refresh)
   const askConfirm = useStore((s) => s.askConfirm)
   const [msg, setMsg] = useState<string | null>(null)
+  const [backups, setBackups] = useState<string[]>([])
 
   const [prefix, setPrefix] = useState<string>("")
-  const [verbs, setVerbs] = useState<string>("")
   const [exe, setExe] = useState<string>("")
   const [exeArgs, setExeArgs] = useState<string>("")
   const [reg, setReg] = useState<string>("")
 
   const selected = prefix || prefixes[0]?.path || ""
 
+  useEffect(() => {
+    void window.api.backupList().then(setBackups).catch(() => undefined)
+  }, [])
+
   const remove = async (n: string): Promise<void> => {
     if (!(await askConfirm(t("prefixos.confirmRemove", { name: n })))) return
     setMsg(null)
     try {
       await window.api.removePrefix(n)
+      await refresh()
+    } catch (e) {
+      setMsg((e as Error).message)
+    }
+  }
+
+  const backupPrefix = async (path: string): Promise<void> => {
+    setMsg(null)
+    try {
+      await window.api.backupPrefix(path)
+      const list = await window.api.backupList()
+      setBackups(list)
+      await refresh()
+    } catch (e) {
+      setMsg((e as Error).message)
+    }
+  }
+
+  const restoreBackup = async (zipName: string): Promise<void> => {
+    setMsg(null)
+    try {
+      await window.api.restorePrefix(zipName)
+      const list = await window.api.backupList()
+      setBackups(list)
       await refresh()
     } catch (e) {
       setMsg((e as Error).message)
@@ -64,6 +92,9 @@ export default function Prefixos(): JSX.Element {
                     <button className="btn" onClick={() => void window.api.openPath(p.path)}>
                       {t("prefixos.btn.open")}
                     </button>
+                    <button className="btn" onClick={() => void backupPrefix(p.path)}>
+                      {t("prefixos.btn.backup")}
+                    </button>
                     <button className="btn danger" onClick={() => void remove(p.name)}>
                       {t("prefixos.btn.remove")}
                     </button>
@@ -73,6 +104,21 @@ export default function Prefixos(): JSX.Element {
             </tbody>
           </table>
         )}
+
+        <div className="field" style={{ marginTop: 14 }}>
+          <label>{t("prefixos.backups.label")}</label>
+          {backups.length === 0 ? (
+            <p className="muted">{t("prefixos.backups.empty")}</p>
+          ) : (
+            <div className="toolbar">
+              {backups.map((b) => (
+                <button key={b} className="btn" onClick={() => void restoreBackup(b)}>
+                  {t("prefixos.btn.restore")} — {b}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </section>
 
       <section className="settings-section">
@@ -103,30 +149,12 @@ export default function Prefixos(): JSX.Element {
           >
             {t("tools.winecfg")}
           </button>
-        </div>
-
-        <div className="field">
-          <label>{t("tools.winetricks.verbs")}</label>
-          <input
-            className="input"
-            type="text"
-            value={verbs}
-            placeholder="d3d11 vcrun2022"
-            title={t("tools.winetricks.verbs.title")}
-            onChange={(e) => setVerbs(e.target.value)}
-          />
           <button
             className="btn"
-            disabled={!selected || !verbs.trim()}
-            title={t("tools.btn.winetricks.title")}
-            onClick={() =>
-              void runTool(
-                () => window.api.winetricks(selected, verbs.trim().split(/\s+/)),
-                "winetricks"
-              )
-            }
+            disabled={!selected}
+            onClick={() => void runTool(() => window.api.winetricks(selected, []), "winetricks")}
           >
-            {t("tools.btn.run")} winetricks
+            {t("tools.btn.winetricks")}
           </button>
         </div>
 

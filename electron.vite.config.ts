@@ -15,5 +15,13 @@ export default defineConfig({
   preload: {},
   renderer: {
     plugins: [react()],
+    build: {
+      rollupOptions: {
+        input: {
+          index: "src/renderer/index.html",
+          "design-system": "src/renderer/design-system.html",
+        },
+      },
+    },
   },
 })

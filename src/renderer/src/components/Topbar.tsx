@@ -4,7 +4,7 @@ import { useI18n } from "../i18n/useI18n"
 import NotificationPanel from "./NotificationPanel"
 import DownloadTracker from "./DownloadTracker"
 import { useClickOutside } from "../useClickOutside"
-import fliperamaLogo from "../../assets/logo/fliperama_logo.png"
+import fliperamaIcon from "../../assets/logo/fliperama_icon_512.png"
 
 function Icon({ path }: { path: string }): JSX.Element {
   return (
@@ -42,7 +42,7 @@ export default function Topbar(): JSX.Element {
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <img className="topbar-logo" src={fliperamaLogo} alt="Fliperama" />
+        <img className="topbar-logo" src={fliperamaIcon} alt="Fliperama" />
       </div>
       <div className="search">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -76,7 +76,7 @@ export default function Topbar(): JSX.Element {
       </div>
       <div className="topbar-right">
         <div className="topbar-icons">
-          <DownloadTracker />
+        <DownloadTracker />
         <div className="notif-wrap" ref={notifWrapRef}>
           <button className="icon-btn" title={t("topbar.notifications")} onClick={() => setNotifOpen(!notifOpen)}>
             <Icon path={ICONS.bell} />

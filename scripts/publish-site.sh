@@ -30,6 +30,13 @@ echo "==> Backup do index.html atual no servidor (se existir)"
 sshpass -p "$PASS" ssh -p "$PORT" -o StrictHostKeyChecking=no "$SERVER" \
   "if [ -f ${DEST}/index.html ]; then cp ${DEST}/index.html ${DEST}/index.html.bak-\$(date +%Y%m%d-%H%M%S); fi; mkdir -p ${DEST}/assets/screenshots ${DEST}/assets/launchers ${DEST}/assets/fonts ${DEST}/i18n"
 
+echo "==> Cache-busting: injetar ?v=<hash> nos assets do index.html"
+BUILD_HASH="$(date +%s)"
+TMP="$(mktemp -d)"
+cp -a "$LOCAL/." "$TMP/"
+sed -i "s/__BUILD_HASH__/$BUILD_HASH/g" "$TMP/index.html"
+LOCAL="$TMP"
+
 echo "==> Sync site/ -> ${SERVER}:${DEST}/ (rsync preserva arquivos não tocados)"
 # -a = archive (perms/times), --delete = remove arquivos do server que não existem localmente,
 # --exclude = nunca deletar backups .bak-*; trailing slash em src copia o conteúdo de site/.
@@ -75,5 +82,7 @@ for p in "${PATHS[@]}"; do
   fi
   echo "  200  ${URL_BASE}${p}"
 done
+
+rm -rf "$TMP"
 
 echo "OK — site publicado em $URL_BASE/"

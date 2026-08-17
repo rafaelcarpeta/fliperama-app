@@ -1,12 +1,74 @@
-import { useEffect, useRef, useState } from "react"
-import { useStore } from "../store"
+import { useEffect, useState } from "react"
+import { createPortal } from "react-dom"
+import { useStore, type AuthStartInfo } from "../store"
 import { useI18n } from "../i18n/useI18n"
 import { LOCALES } from "../i18n"
-import { ACCENT_PRESETS, applyAccent, parseHex } from "../accent"
 
 const KEY_LINKS: Record<string, string> = {
   steamgriddb: "https://www.steamgriddb.com/profile/preferences/api",
   itad: "https://isthereanydeal.com/apps/my/",
+}
+
+function AuthModal({
+  store,
+  info,
+  onClose,
+  onDone,
+}: {
+  store: "epic" | "gog"
+  info: AuthStartInfo
+  onClose: () => void
+  onDone: () => void
+}): JSX.Element {
+  const { t } = useI18n()
+  const authComplete = useStore((s) => s.authComplete)
+  const [code, setCode] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const submit = async (): Promise<void> => {
+    if (!code.trim()) return
+    setBusy(true)
+    setErr(null)
+    try {
+      await authComplete(store, code.trim())
+      onDone()
+    } catch (e) {
+      setErr((e as Error).message)
+      setBusy(false)
+    }
+  }
+
+  return createPortal(
+    <div className="art-overlay" onClick={onClose}>
+      <div className="art-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="art-modal-head">
+          <h3>{t("launchers.auth.title", { store: store === "epic" ? "Epic" : "GOG" })}</h3>
+          <button className="icon-btn" onClick={onClose} title={t("common.close")}>✕</button>
+        </div>
+        <p className="muted">{info.hint}</p>
+        <div className="art-search-row" style={{ marginTop: 12 }}>
+          <input
+            className="art-search"
+            placeholder={store === "epic" ? "authorizationCode" : "Código / URL de redirect"}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void submit()
+            }}
+          />
+          <button className="btn" onClick={() => void submit()} disabled={busy || !code.trim()}>
+            {busy ? "..." : t("launchers.auth.confirm")}
+          </button>
+        </div>
+        {err && <p className="muted art-msg" style={{ color: "var(--danger, #ff5555)" }}>{err}</p>}
+        <div className="art-actions">
+          <button className="btn ghost" onClick={onClose}>{t("common.cancel")}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
 }
 
 export default function Settings(): JSX.Element {
@@ -24,42 +86,24 @@ export default function Settings(): JSX.Element {
   const [showKeys, setShowKeys] = useState(false)
   const [itadStatus, setItadStatus] = useState<string | null>(null)
   const [artStatus, setArtStatus] = useState<string | null>(null)
-  const [steamApiKey, setSteamApiKey] = useState("")
-  const [steamUsername, setSteamUsername] = useState("")
-  const [steamPassword, setSteamPassword] = useState("")
-  const [steamStatusMsg, setSteamStatusMsg] = useState<string | null>(null)
-  const [scm, setScm] = useState<Awaited<ReturnType<typeof window.api.steamCmdStatus>> | null>(null)
-  const [scmProgress, setScmProgress] = useState<number | null>(null)
-  const [scmBusy, setScmBusy] = useState(false)
   const [deps, setDeps] = useState<Awaited<ReturnType<typeof window.api.depsStatus>> | null>(null)
   const [depsMsg, setDepsMsg] = useState<string | null>(null)
   const [depsBusy, setDepsBusy] = useState(false)
   const [prefixesDir, setPrefixesDir] = useState<string>("")
   const [gamesDir, setGamesDir] = useState<string>("")
-  const [accent, setAccent] = useState("#7c3aed")
   const [autostart, setAutostart] = useState(false)
   const [trayEnabled, setTrayEnabled] = useState(false)
   const [minimizeToTray, setMinimizeToTray] = useState(false)
   const [autoUpdate, setAutoUpdate] = useState(false)
-  const colorInputRef = useRef<HTMLInputElement | null>(null)
+  const [authModal, setAuthModal] = useState<{ store: "epic" | "gog"; info: AuthStartInfo } | null>(null)
+  const [authBusy, setAuthBusy] = useState(false)
 
   useEffect(() => {
-    void window.api.accentGet().then((hex) => {
-      if (hex) setAccent(hex)
-    })
     void window.api.autostartGet().then(setAutostart)
     void window.api.trayGet().then(setTrayEnabled)
     void window.api.minimizeToTrayGet().then(setMinimizeToTray)
     void window.api.settingsKeyGet("autoUpdate").then((v) => setAutoUpdate(v === "1"))
   }, [])
-
-  const saveAccent = async (hex: string): Promise<void> => {
-    if (!parseHex(hex)) return
-    setAccent(hex)
-    applyAccent(hex)
-    const saved = await window.api.accentSet(hex)
-    if (saved) setAccent(saved)
-  }
 
   const toggleAutostart = async (next: boolean): Promise<void> => {
     const ok = await window.api.autostartSet(next)
@@ -86,17 +130,8 @@ export default function Settings(): JSX.Element {
       setKeys((k) => ({ ...k, steamgriddb: v }))
     )
     void window.api.settingsKeyGet("itadKey").then((v) => setKeys((k) => ({ ...k, itad: v })))
-    void window.api.settingsKeyGet("steamApiKey").then(setSteamApiKey)
-    void window.api.settingsKeyGet("steamUsername").then(setSteamUsername)
-    void window.api.settingsKeyGet("steamPassword").then(setSteamPassword)
     void window.api.getPrefixesDir().then(setPrefixesDir)
     void window.api.getGamesDir().then(setGamesDir)
-  }, [])
-
-  useEffect(() => {
-    void window.api.steamCmdStatus().then(setScm)
-    const off = window.api.onSteamCmdProgress((p) => setScmProgress(Math.round(p.percent * 100)))
-    return () => off()
   }, [])
 
   useEffect(() => {
@@ -176,50 +211,37 @@ export default function Settings(): JSX.Element {
     setItadStatus(t("settings.status.itadSaved"))
   }
 
-  const saveSteamLogin = async (): Promise<void> => {
-    if (!steamUsername || !steamPassword) {
-      setSteamStatusMsg(t("settings.status.steamEmptyLogin"))
-      return
-    }
-    await window.api.settingsKeySet("steamUsername", steamUsername)
-    await window.api.settingsKeySet("steamPassword", steamPassword)
-    setSteamStatusMsg(t("settings.status.steamLoginSaved"))
-    setScm(await window.api.steamCmdStatus())
-  }
+  const auth = useStore((s) => s.auth)
+  const authStart = useStore((s) => s.authStart)
+  const authLink = useStore((s) => s.authLink)
+  const authLogout = useStore((s) => s.authLogout)
+  const backends = useStore((s) => s.backends)
+  const backendDownload = useStore((s) => s.backendDownload)
+  const askConfirm = useStore((s) => s.askConfirm)
 
-  const saveSteamApiKey = async (): Promise<void> => {
-    const key = steamApiKey.trim()
-    if (!key) {
-      setSteamStatusMsg(t("settings.status.emptyKey"))
-      return
-    }
-    setSteamStatusMsg(t("settings.status.testingSteamKey"))
-    const ok = await window.api.steamApiKeyTest(key)
-    if (!ok) {
-      setSteamStatusMsg(t("settings.status.steamKeyInvalid"))
-      return
-    }
-    await window.api.settingsKeySet("steamApiKey", key)
-    setSteamStatusMsg(t("settings.status.steamKeySaved"))
-  }
-
-  const installSteamCmd = async (): Promise<void> => {
-    setScmBusy(true)
-    setSteamStatusMsg(t("settings.status.installingSteamCmd"))
-    setScmProgress(null)
+  const linkAccount = async (store: "epic" | "gog"): Promise<void> => {
+    setAuthBusy(true)
     try {
-      await window.api.steamCmdInstall()
-      setSteamStatusMsg(t("settings.status.steamCmdInstalled"))
+      // Fluxo automático (janela embutida): captura o code sem copiar/colar.
+      const status = await authLink(store)
+      if (!status?.connected) {
+        // Fallback manual (colar código) — raro.
+        const info = await authStart(store)
+        setAuthModal({ store, info })
+      }
     } catch (e) {
-      setSteamStatusMsg((e as Error).message)
+      const msg = (e as Error).message ?? ""
+      if (msg.includes("janela fechada")) {
+        // Usuário cancelou o login — volta ao estado anterior, sem navegador.
+        useStore.getState().setStatus(t("common.cancel"))
+      } else {
+        // Falha real: oferece o fluxo manual (colar URL/código).
+        const info = await authStart(store)
+        setAuthModal({ store, info })
+      }
+    } finally {
+      setAuthBusy(false)
     }
-    setScmBusy(false)
-    setScm(await window.api.steamCmdStatus())
-  }
-
-  const removeSteamCmd = async (): Promise<void> => {
-    await window.api.steamCmdRemove()
-    setScm(await window.api.steamCmdStatus())
   }
 
   const updateText =
@@ -255,45 +277,6 @@ export default function Settings(): JSX.Element {
                 <span>{l.name}</span>
               </button>
             ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-section">
-        <h3>{t("settings.section.appearance")}</h3>
-        <p className="muted">{t("settings.appearance.hint")}</p>
-        <div className="field">
-          <label>{t("settings.field.accent")}</label>
-          <div className="accent-row">
-            {ACCENT_PRESETS.map((p) => (
-              <button
-                key={p.id}
-                className={`accent-swatch ${accent === p.hex ? "active" : ""}`}
-                style={{ background: p.hex }}
-                title={p.name}
-                aria-label={p.name}
-                onClick={() => void saveAccent(p.hex)}
-              />
-            ))}
-            <button
-              className={`accent-swatch custom ${ACCENT_PRESETS.find((p) => p.hex === accent) ? "" : "active"}`}
-              style={{ background: accent }}
-              title={t("settings.field.accentCustom")}
-              onClick={() => colorInputRef.current?.click()}
-              type="button"
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-              </svg>
-            </button>
-            <input
-              ref={colorInputRef}
-              type="color"
-              style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
-              value={accent}
-              onChange={(e) => void saveAccent(e.target.value)}
-            />
           </div>
         </div>
       </section>
@@ -399,83 +382,53 @@ export default function Settings(): JSX.Element {
       </section>
 
       <section className="settings-section">
-        <h3>{t("settings.section.steam")}</h3>
-        <p className="muted">{t("settings.section.steam.hint")}</p>
+        <h3>{t("settings.section.accounts")}</h3>
+        <p className="muted">{t("settings.section.accounts.hint")}</p>
 
-        <div className="field">
-          <label>{t("settings.field.steamApiKey")}</label>
-          <input
-            type={showKeys ? "text" : "password"}
-            value={steamApiKey}
-            placeholder={t("settings.placeholder.key")}
-            autoComplete="off"
-            onChange={(e) => setSteamApiKey(e.target.value)}
-          />
-          <a
-            className="key-link"
-            href="https://steamcommunity.com/dev/apikey"
-            onClick={(e) => {
-              e.preventDefault()
-              openSite("https://steamcommunity.com/dev/apikey")
-            }}
-          >
-            {t("settings.getKeyFree")} ↗
-          </a>
-          <button className="btn" onClick={() => void saveSteamApiKey()}>
-            {t("settings.btn.saveSteamKey")}
-          </button>
-        </div>
-
-        <div className="field">
-          <label>{t("settings.field.steamUsername")}</label>
-          <input
-            type="text"
-            value={steamUsername}
-            placeholder="username"
-            autoComplete="off"
-            onChange={(e) => setSteamUsername(e.target.value)}
-          />
-        </div>
-
-        <div className="field">
-          <label>{t("settings.field.steamPassword")}</label>
-          <input
-            type={showKeys ? "text" : "password"}
-            value={steamPassword}
-            placeholder="••••••••"
-            autoComplete="off"
-            onChange={(e) => setSteamPassword(e.target.value)}
-          />
-          <button className="btn" onClick={() => void saveSteamLogin()}>
-            {t("settings.btn.saveSteamLogin")}
-          </button>
-          <p className="muted">{t("settings.steam.guardHint")}</p>
-        </div>
-
-        <div className="field">
-          <label>{t("settings.field.steamcmd")}</label>
-          {scm && (
-            <p className="muted">
-              {scm.installed
-                ? `${t("settings.steamcmd.installed")} (${scm.managed ? "Fliperama" : t("settings.steamcmd.system")})${scm.hasLogin ? ` • ${t("settings.steamcmd.loginOk")}` : ""}`
-                : t("settings.steamcmd.missing")}
-            </p>
-          )}
-          {scmProgress !== null && <p className="muted">{t("settings.status.steamCmdDownloading", { percent: scmProgress })}</p>}
-          <div className="toolbar">
-            {!scm?.installed && (
-              <button className="btn" disabled={scmBusy} onClick={() => void installSteamCmd()}>
-                {t("settings.btn.installSteamCmd")}
-              </button>
-            )}
-            {scm?.installed && (
-              <button className="btn ghost" onClick={() => void removeSteamCmd()}>
-                {t("settings.btn.removeSteamCmd")}
-              </button>
-            )}
-          </div>
-          {steamStatusMsg && <p className="muted">{steamStatusMsg}</p>}
-        </div>
+        {(["epic", "gog"] as const).map((id) => {
+          const backendId = id === "epic" ? "legendary" : "gogdl"
+          const backendInstalled = backends.find((b) => b.id === backendId)?.installed
+          const state = auth[id]
+          const isLinked = state?.connected ?? false
+          const label = id === "epic" ? "Epic Games" : "GOG"
+          return (
+            <div className="field" key={id}>
+              <label>{label}</label>
+              {isLinked ? (
+                <p className="muted">
+                  {t("launchers.auth.account", { user: state?.user ?? "" })}
+                </p>
+              ) : !backendInstalled ? (
+                <p className="muted">{t("launchers.auth.backendMissing", { store: label })}</p>
+              ) : (
+                <p className="muted">{t("launchers.auth.disconnected")}</p>
+              )}
+              <div className="toolbar">
+                {isLinked ? (
+                  <button
+                    className="btn ghost"
+                    disabled={running}
+                    onClick={() => {
+                      void askConfirm(t("launchers.auth.confirmLogout", { store: label })).then((ok) => {
+                        if (ok) void authLogout(id)
+                      })
+                    }}
+                  >
+                    {t("launchers.auth.unlink")}
+                  </button>
+                ) : !backendInstalled ? (
+                  <button className="btn" disabled={authBusy} onClick={() => void backendDownload(backendId)}>
+                    {t("launchers.auth.downloadBackend")}
+                  </button>
+                ) : (
+                  <button className="btn" disabled={authBusy} onClick={() => void linkAccount(id)}>
+                    {t("launchers.auth.link")}
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </section>
 
       <section className="settings-section">
@@ -573,10 +526,17 @@ export default function Settings(): JSX.Element {
 
       <div className="toolbar">
         {running && <button className="btn" onClick={() => void kill()}>{t("settings.btn.kill")}</button>}
-        {import.meta.env.DEV && (
-          <button className="btn" onClick={() => void window.api.restartApp()}>{t("settings.btn.restart")}</button>
-        )}
+        <button className="btn" onClick={() => void window.api.restartApp()}>{t("settings.btn.restartUi")}</button>
       </div>
+
+      {authModal && (
+        <AuthModal
+          store={authModal.store}
+          info={authModal.info}
+          onClose={() => setAuthModal(null)}
+          onDone={() => setAuthModal(null)}
+        />
+      )}
     </div>
   )
 }

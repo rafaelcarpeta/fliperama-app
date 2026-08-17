@@ -1,6 +1,13 @@
-import { existsSync, rmSync, cpSync, mkdirSync, readdirSync, type Dirent } from "node:fs"
+import {
+  existsSync,
+  rmSync,
+  cpSync,
+  mkdirSync,
+  readdirSync,
+  type Dirent,
+} from "node:fs"
 import { readdir, mkdir } from "node:fs/promises"
-import { spawnSync, execFileSync } from "node:child_process"
+import { spawnSync } from "node:child_process"
 import { basename, dirname, join } from "node:path"
 import { app, dialog } from "electron"
 import * as processes from "./processes"
@@ -68,26 +75,6 @@ export const LAUNCHERS: LauncherDef[] = [
     web: "https://store.steampowered.com",
   },
   {
-    id: "amazon",
-    name: "Amazon Games",
-    store: "amazon",
-    gameId: "umu-amazon",
-    installerUrl: "https://download.amazongames.com/AmazonGamesSetup.exe",
-    installerName: "AmazonGamesSetup.exe",
-    installEnv: ["PROTON_ENABLE_WAYLAND=0"],
-    runExe: join(
-      "drive_c",
-      "users",
-      "steamuser",
-      "AppData",
-      "Local",
-      "Amazon Games",
-      "App",
-      "Amazon Games.exe"
-    ),
-    web: "https://gaming.amazon.com",
-  },
-  {
     id: "battlenet",
     name: "Battle.net",
     store: "battlenet",
@@ -98,21 +85,6 @@ export const LAUNCHERS: LauncherDef[] = [
     installEnv: ["PROTON_ENABLE_WAYLAND=0", "WINE_SIMULATE_WRITECOPY=1"],
     runExe: join("drive_c", "Program Files (x86)", "Battle.net", "Battle.net.exe"),
     web: "https://www.battle.net",
-  },
-  {
-    id: "gog",
-    name: "GOG Galaxy",
-    store: "gog",
-    gameId: "umu-gog",
-    installerUrl: "https://github.com/Faugus/components/releases/download/v1.0.1/gog.tar.gz",
-    installerName: "gog.tar.gz",
-    preInstall: preInstallGog,
-    installArgs: ["/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"],
-    // /runWithoutUpdating: evita o loop do updater (erros GnuTLS no TLS via
-    // wininet/wine); /deelevated: evita pedir elevação — fonte: Lutris gog-galaxy.
-    args: ["/runWithoutUpdating", "/deelevated"],
-    runExe: join("drive_c", "Program Files", "GOG Galaxy", "GalaxyClient.exe"),
-    web: "https://www.gog.com",
   },
   {
     id: "ubisoft",
@@ -164,27 +136,10 @@ export const LAUNCHERS: LauncherDef[] = [
     runExe: join("drive_c", "Program Files", "Rockstar Games", "Launcher", "Launcher.exe"),
     web: "https://store.rockstargames.com",
   },
-  {
-    id: "wargaming",
-    name: "Wargaming Game Center",
-    store: "wargaming",
-    gameId: "umu-wargaming",
-    installerUrl: "https://redirect.wargaming.net/WGC/Wargaming_Game_Center_Install_NA.exe",
-    installerName: "wargaming_game_center_install_na_dgp3m1ci2u7l.exe",
-    installArgs: ["/SILENT"],
-    runExe: join("drive_c", "ProgramData", "Wargaming.net", "GameCenter", "wgc.exe"),
-    web: "https://wargaming.com",
-  },
 ]
 
 // O restante da implementação já foi atualizado nas seções anteriores.
 // Caso queira adicionar funções auxiliares adicionais, inclua-as aqui.
-
-async function preInstallGog(installerPath: string): Promise<string> {
-  const dir = installersDir()
-  execFileSync("tar", ["-xzf", installerPath, "-C", dir], { stdio: "ignore" })
-  return join(dir, "gog", "GalaxySetup.exe")
-}
 
 // EA fix (espelho faugus ea_fix.py): copia a versão mais recente de
 // "EA Desktop/<versão>/EA Desktop/*" para "EA Desktop/EA Desktop/" e remove
@@ -234,7 +189,7 @@ export async function isInstalled(l: LauncherDef): Promise<boolean> {
 }
 
 // Launchers instalam em "Program Files" ou "Program Files (x86)" — mas também
-// fora deles (Amazon em users/steamuser/AppData, Wargaming em ProgramData).
+// fora deles (ex.: Rockstar no caminho direto de runExe).
 // Estratégia: (1) caminho direto de runExe; (2) remapear Program Files/(x86);
 // (3) busca recursiva limitada.
 export async function resolveExe(l: LauncherDef): Promise<string | null> {
@@ -306,7 +261,9 @@ export async function listStatuses(): Promise<LauncherStatus[]> {
       native: l.native,
       uninstallable: l.uninstallable,
       installed: await isInstalled(l),
-      running: false,
+      running:
+        (await processes.isKeyRunning(l.gameId)) ||
+        processes.isPrefixRunning(prefixDir(l.id)),
       prefix: l.native ? ((await steam.rootPath()) ?? "") : prefixDir(l.id),
     }))
   )
@@ -465,7 +422,7 @@ export async function install(id: string, cb: InstallCallbacks = {}): Promise<pr
     gameId: l.gameId,
     store: l.store,
     envVars: installEnv,
-    onExit: (code) => {
+    onExit: (_key, code) => {
       // Monitoramento (Faugus monitor_process): se o instalador terminar sem o
       // exe resolvido → prefixo removido + falha reportada; senão, postInstall.
       void (async () => {
@@ -533,5 +490,83 @@ export async function run(id: string): Promise<processes.StartResult> {
     envVars,
     preLaunch: scripts.preLaunch,
     postLaunch: scripts.postLaunch,
+  })
+}
+
+// Envia o comando de instalação/execução de um jogo Epic ao launcher nativo,
+// sem baixar nada via legendary — fluxo análogo ao Steam (steam://install,
+// steam://run). A URI é entregue invocando o exe do launcher diretamente
+// dentro do prefixo (resolução de protocolo do Windows).
+//
+// Correções Fase 13:
+// - **Invocação direta do exe** (não `cmd.exe /c start`): o ShellExecute do
+//   Wine não resolve protocolos custom (casos não-http) — `start` falha em
+//   silêncio. Rodar o binário com a URI como argv funciona (Epic re-executa
+//   com `-forwarduri`).
+// - **processKey distinto** (`umu-cmd-*`): o `processes.start` recusa segundo
+//   processo com a mesma key; usar `gameId` do launcher quebrava o comando
+//   quando o launcher já estava aberto.
+export async function launcherGameCommand(opts: {
+  store: "epic"
+  action: "install" | "play" | "uninstall"
+  appName?: string
+}): Promise<processes.StartResult> {
+  const l = getById("epic")
+  if (!l) throw new Error(`launcher desconhecido: epic`)
+  const dir = prefixDir("epic")
+  if (!existsSync(dir)) throw new Error(`${l.name} não está instalado — instale o launcher primeiro`)
+  const exe = await resolveExe(l)
+  if (!exe) throw new Error(`${l.name} não está instalado — instale o launcher primeiro`)
+  const ctx = {
+    dir,
+    exe,
+    proton: launcherConfig.protonFor("epic"),
+    gameId: l.gameId,
+    store: l.store,
+    envVars: launcherConfig.getConfig("epic").envVars,
+  }
+  if (!opts.appName) throw new Error("jogo Epic sem appName")
+  const action = opts.action === "play" ? "launch" : opts.action
+  return launchUriInPrefix(ctx, `com.epicgames.launcher://apps/${encodeURIComponent(opts.appName)}?action=${action}`)
+}
+
+export function installGameViaLauncher(opts: { store: "epic"; appName?: string }): Promise<processes.StartResult> {
+  return launcherGameCommand({ ...opts, action: "install" })
+}
+
+export function playGameViaLauncher(opts: { store: "epic"; appName?: string }): Promise<processes.StartResult> {
+  return launcherGameCommand({ ...opts, action: "play" })
+}
+
+export function uninstallGameViaLauncher(opts: { store: "epic"; appName?: string }): Promise<processes.StartResult> {
+  return launcherGameCommand({ ...opts, action: "uninstall" })
+}
+
+// Dispara a URI no prefixo via UMU invocando o exe do launcher diretamente com
+// a URI como argumento (fire-and-forget). Executar o binário direto resolve o
+// protocolo corretamente (ex.: Epic re-executa com -forwarduri); o
+// `cmd.exe /c start <uri>` do Windows falha no Wine para protocolos custom
+// (ShellExecute não resolve casos não-http). processKey próprio → não colide
+// com o launcher já aberto no mesmo prefixo.
+function launchUriInPrefix(
+  opts: {
+    dir: string
+    exe: string
+    proton?: string
+    gameId: string
+    store: string
+    envVars: string[]
+  },
+  uri: string
+): processes.StartResult {
+  return umu.run({
+    prefix: opts.dir,
+    exe: opts.exe,
+    args: [uri],
+    proton: opts.proton,
+    gameId: opts.gameId,
+    store: opts.store,
+    envVars: opts.envVars,
+    processKey: `umu-cmd-${Date.now()}`,
   })
 }

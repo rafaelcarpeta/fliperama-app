@@ -1,23 +1,22 @@
 import { writeFileSync, mkdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { BrowserWindow, Notification } from "electron"
+import { BrowserWindow } from "electron"
 import * as processes from "./processes"
 import * as library from "./library"
-import * as steamcmd from "./steamcmd"
 
 // Estado de downloads em andamento. Persistido em
 // ~/.local/state/fliperama/downloads.json (sobrevive a crash; lista histórica).
 //
-// Cada download recebe um `key` único (`epic-<appName>` / `gog-<productId>`)
-// que é reusado em processes.killById(key) para cancelar.
+// Cada download recebe um `key` único (`download-gog-<productId>`) que é
+// reusado em processes.killById(key) para cancelar o processo do gogdl.
 
 export type DownloadStatus = "running" | "completed" | "failed" | "cancelled"
 
 export interface DownloadInfo {
   key: string
-  store: "epic" | "gog" | "steam"
-  appId: string // AppName (Epic), productId (GOG) ou appid (Steam)
+  store: "gog"
+  appId: string // productId (GOG)
   name: string // display
   pid?: number
   startedAt: number
@@ -118,62 +117,8 @@ export function cancel(key: string): boolean {
   return ok
 }
 
-export function keyForEpic(appName: string): string {
-  return `download-epic-${appName}`
-}
-
 export function keyForGog(productId: number | string): string {
   return `download-gog-${productId}`
-}
-
-export function keyForSteam(appid: number): string {
-  return `download-steam-${appid}`
-}
-
-// Wrappers de alto nível — registram o download e devolvem o key + pid
-// para permitir cancelamento e tracking.
-
-export function startEpic(
-  appName: string,
-  name: string,
-  onDone?: (ok: boolean, error?: string) => void
-): { key: string; pid: number | undefined } {
-  const key = keyForEpic(appName)
-  let pid: number | undefined
-  const info: DownloadInfo = {
-    key,
-    store: "epic",
-    appId: appName,
-    name,
-    pid: undefined,
-    startedAt: Date.now(),
-    lastUpdate: Date.now(),
-    status: "running",
-    progress: { percent: 0, phase: "download" },
-  }
-  const handle = library.installEpic(
-    appName,
-    name,
-    {
-      onProgress: (progress) => update(key, { progress, pid }),
-      onDone: (ok, error) => {
-        setStatus(key, ok ? "completed" : "failed", error)
-        onDone?.(ok, error)
-      },
-    },
-    key
-  )
-  pid = handle.pid
-  if (!pid) {
-    info.status = "failed"
-    info.error = "spawn falhou"
-    pushToHistory(info)
-    broadcast("downloads:update", info)
-    return { key, pid }
-  }
-  info.pid = pid
-  register(info)
-  return { key, pid }
 }
 
 export function startGog(
@@ -207,68 +152,6 @@ export function startGog(
     key
   )
   pid = handle.pid
-  if (!pid) {
-    info.status = "failed"
-    info.error = "spawn falhou"
-    pushToHistory(info)
-    broadcast("downloads:update", info)
-    return { key, pid }
-  }
-  info.pid = pid
-  register(info)
-  return { key, pid }
-}
-
-export function startSteam(
-  appid: number,
-  name: string,
-  onDone?: (ok: boolean, error?: string) => void
-): { key: string; pid: number | undefined } {
-  const key = keyForSteam(appid)
-  let pid: number | undefined
-  const info: DownloadInfo = {
-    key,
-    store: "steam",
-    appId: String(appid),
-    name,
-    pid: undefined,
-    startedAt: Date.now(),
-    lastUpdate: Date.now(),
-    status: "running",
-    progress: { percent: 0, phase: "download" },
-  }
-  try {
-    const handle = steamcmd.installGame(
-      appid,
-      name,
-      {
-        onProgress: (progress) => update(key, { progress, pid }),
-        onGuard: () => broadcast("steamcmd:guardCodeRequested", { key, name }),
-        onDone: (ok, error) => {
-          setStatus(key, ok ? "completed" : "failed", error)
-          onDone?.(ok, error)
-        },
-      },
-      key
-    )
-    pid = handle.pid
-    // Avisa a UI imediatamente para mostrar a orientação do Steam Guard no
-    // celular antes do steamcmd bloquear pedindo o código. A notificação
-    // permanece aberta até o download começar a progredir.
-    broadcast("steamcmd:guardCodeRequested", { key, name })
-    if (Notification.isSupported()) {
-      new Notification({
-        title: "Steam Guard — autorização",
-        body: `Abra o app Steam no celular e aprove o login${name ? ` para ${name}` : ""}. O download inicia automaticamente após a aprovação.`,
-      }).show()
-    }
-  } catch (e) {
-    info.status = "failed"
-    info.error = (e as Error).message
-    pushToHistory(info)
-    broadcast("downloads:update", info)
-    return { key, pid }
-  }
   if (!pid) {
     info.status = "failed"
     info.error = "spawn falhou"

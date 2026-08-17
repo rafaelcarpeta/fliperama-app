@@ -48,24 +48,28 @@ const PKGS: Record<string, Record<string, string>> = {
     wine: "wine",
     winetricks: "winetricks",
     vulkan: "libvulkan1 mesa-vulkan-drivers",
+    taskset: "util-linux",
   },
   dnf: {
     umu: "umu-launcher",
     wine: "wine",
     winetricks: "winetricks",
     vulkan: "vulkan-loader mesa-vulkan-drivers",
+    taskset: "util-linux",
   },
   pacman: {
     umu: "umu-launcher",
     wine: "wine",
     winetricks: "winetricks",
     vulkan: "vulkan-icd-loader vulkan-radeon vulkan-intel",
+    taskset: "util-linux",
   },
   zypper: {
     umu: "umu-launcher",
     wine: "wine",
     winetricks: "winetricks",
     vulkan: "vulkan-loader vulkan-radeon",
+    taskset: "util-linux",
   },
 }
 
@@ -116,6 +120,7 @@ export async function detectDeps(): Promise<DepsPlan> {
   const localProton = listProtons().some((p) => !p.automatic && p.path)
   const proton = localProton || umu // UMU-Proton automático cobre quando umu-run existe
   const vulkan = await hasVulkan()
+  const taskset = commandExists("taskset")
 
   const specs = [
     { id: "umu", name: "umu-run", ok: umu, pkg: "umu" },
@@ -123,6 +128,7 @@ export async function detectDeps(): Promise<DepsPlan> {
     { id: "winetricks", name: "Winetricks", ok: winetricks, pkg: "winetricks" },
     { id: "proton", name: "Proton", ok: proton, pkg: null },
     { id: "vulkan", name: "Drivers Vulkan", ok: vulkan, pkg: "vulkan" },
+    { id: "taskset", name: "taskset (util-linux)", ok: taskset, pkg: "taskset" },
   ]
 
   const all: DepStatus[] = []
@@ -148,7 +154,7 @@ function runPkexec(cmd: string[]): Promise<{ code: number | null }> {
   return new Promise((resolve, reject) => {
     try {
       processes.start("pkexec", cmd, { ...process.env }, undefined, "deps", {
-        onExit: (code) => resolve({ code }),
+        onExit: (_key, code) => resolve({ code }),
       })
     } catch (err) {
       reject(err)

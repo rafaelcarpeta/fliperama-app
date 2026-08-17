@@ -1,0 +1,107 @@
+/* Phase 2.5 — Settings only. */
+
+.main > h2.page-title {
+  color: var(--fl-content-primary);
+  font-family: var(--fl-font-display);
+  font-weight: var(--fl-font-weight-display);
+  letter-spacing: var(--fl-tracking-display);
+}
+
+.main:has(> h2.page-title) .settings-section {
+  background: var(--fl-gradient-panel);
+  border-color: var(--fl-border-subtle);
+}
+
+.main:has(> h2.page-title) .settings-section h3 {
+  color: var(--fl-accent-brand);
+  letter-spacing: var(--fl-tracking-label);
+}
+
+.main:has(> h2.page-title) .muted,
+.main:has(> h2.page-title) .field label {
+  color: var(--fl-content-secondary);
+}
+
+.main:has(> h2.page-title) .locale-option {
+  background: var(--fl-dark-6-5-12-a44);
+  border-color: var(--fl-white-a10);
+  color: var(--fl-content-secondary);
+}
+
+.main:has(> h2.page-title) .locale-option:hover {
+  background: var(--fl-white-a04);
+  border-color: var(--fl-pink-a17);
+  color: var(--fl-content-primary);
+}
+
+.main:has(> h2.page-title) .locale-option.active {
+  background: var(--fl-pink-a17);
+  border-color: var(--fl-accent-brand);
+  color: var(--fl-color-white);
+  box-shadow: var(--fl-outline-card-hover);
+}
+
+.main:has(> h2.page-title) .locale-option:focus-visible {
+  border-color: var(--fl-focus-ring);
+  box-shadow: var(--fl-focus-control);
+  outline: none;
+}
+
+.main:has(> h2.page-title) .field input,
+.main:has(> h2.page-title) .input {
+  background: var(--fl-dark-6-5-12-a44);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-primary);
+}
+
+.main:has(> h2.page-title) .field input:focus,
+.main:has(> h2.page-title) .input:focus {
+  border-color: var(--fl-focus-ring);
+  box-shadow: var(--fl-focus-control);
+}
+
+.main:has(> h2.page-title) select.input option {
+  background: var(--fl-color-bg-alt);
+  color: var(--fl-content-primary);
+}
+
+.main:has(> h2.page-title) .key-link {
+  color: var(--fl-accent-info);
+}
+
+.main:has(> h2.page-title) code,
+.main:has(> h2.page-title) .path-value {
+  background: var(--fl-dark-6-5-12-a44);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-secondary);
+}
+
+.main:has(> h2.page-title) .switch-field {
+  border-bottom-color: var(--fl-border-subtle);
+}
+
+.main:has(> h2.page-title) .btn:not(.danger) {
+  background: var(--fl-gradient-brand);
+  border-color: transparent;
+  color: var(--fl-color-white);
+  box-shadow: none;
+}
+
+.main:has(> h2.page-title) .btn.ghost {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-white-a10);
+  color: var(--fl-content-primary);
+}
+
+.main:has(> h2.page-title) .btn:hover:not(:disabled) {
+  border-color: var(--fl-pink-a17);
+  box-shadow: var(--fl-shadow-brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main:has(> h2.page-title) .locale-option,
+  .main:has(> h2.page-title) .input,
+  .main:has(> h2.page-title) .btn {
+    transition: none;
+  }
+}

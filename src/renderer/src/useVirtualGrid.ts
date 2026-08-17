@@ -7,8 +7,14 @@ import { useCallback, useEffect, useRef, useState } from "react"
 const GAP = 12
 const MIN_CARD_WIDTH = 160
 const CARD_ASPECT = 2 / 3 // largura/altura do cover (aspect-ratio 2/3)
-const OVERSCAN_ROWS = 2
+// Mantém algumas linhas prontas fora da viewport para que capas já estejam
+// decodificadas durante rolagens rápidas, sem abandonar a virtualização.
+const OVERSCAN_ROWS = 3
 const VIRTUALIZE_MIN = 50
+// Impede que a primeira renderização monte a biblioteca inteira enquanto o
+// ResizeObserver ainda não mediu o grid. A medida real substitui esta
+// estimativa assim que a primeira linha visível entra no layout.
+const ESTIMATED_ROW_HEIGHT = Math.round(MIN_CARD_WIDTH / CARD_ASPECT + GAP)
 
 function findScrollContainer(el: HTMLElement | null): HTMLElement | null {
   let node = el?.parentElement ?? null
@@ -33,8 +39,9 @@ export function useVirtualGrid(totalItems: number): {
   const [viewport, setViewport] = useState(0)
   const [scrollTop, setScrollTop] = useState(0)
   const [gridWidth, setGridWidth] = useState(0)
-  const [rowHeight, setRowHeight] = useState(0)
+  const [rowHeight, setRowHeight] = useState(ESTIMATED_ROW_HEIGHT)
   const [cols, setCols] = useState(5)
+  const hasMeasuredRow = useRef(false)
 
   const gridRef = useCallback((el: HTMLDivElement | null) => {
     gridEl.current = el
@@ -66,15 +73,16 @@ export function useVirtualGrid(totalItems: number): {
     if (gridWidth <= 0) return
     const c = Math.max(1, Math.floor((gridWidth + GAP) / (MIN_CARD_WIDTH + GAP)))
     setCols(c)
-    if (rowHeight === 0) {
+    if (!hasMeasuredRow.current) {
       const cardWidth = (gridWidth - (c - 1) * GAP) / c
       setRowHeight(Math.round(cardWidth / CARD_ASPECT + GAP))
     }
-  }, [gridWidth, rowHeight])
+  }, [gridWidth])
 
   // Mede a altura real da primeira linha visível e usa como referência.
   const lineRef = useCallback((el: HTMLDivElement | null) => {
     if (el) {
+      hasMeasuredRow.current = true
       const h = el.offsetHeight
       setRowHeight((prev) => (prev === h ? prev : h))
     }

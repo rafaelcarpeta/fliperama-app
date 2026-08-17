@@ -5,6 +5,10 @@ import {
   isLocale,
   type Locale,
 } from "./i18n"
+import { matchTrainer as _matchTrainer, type TrainerExe } from "./trainerMatch"
+
+// Reexporta o matcher de trainers (lógica pura em trainerMatch.ts).
+export const matchTrainer = _matchTrainer
 
 export interface ConfirmRequest {
   message: string
@@ -19,6 +23,7 @@ export type View =
   | "prefixos"
   | "proton"
   | "scripts"
+  | "trainers"
   | "ferramentas"
 
 export type ViewMode = "grid" | "list"
@@ -145,6 +150,28 @@ export interface AuthStartInfo {
   hint: string
 }
 
+export interface DownloadProgress {
+  percent: number
+  phase?: "download" | "verify" | "install" | "done"
+  downloaded?: number // MiB
+  total?: number // MiB
+  speed?: number // MiB/s
+  eta?: string // HH:MM:SS
+}
+
+export interface DownloadInfo {
+  key: string
+  store: "epic" | "gog" | "steam"
+  appId: string
+  name: string
+  pid?: number
+  startedAt: number
+  lastUpdate: number
+  status: "running" | "completed" | "failed" | "cancelled"
+  error?: string
+  progress: DownloadProgress
+}
+
 export interface SteamStatus {
   steamid: string | null
   libraryTotal: number
@@ -175,37 +202,6 @@ export interface AppNotification {
   body: string
   time: number
   read: boolean
-}
-
-export interface DownloadProgress {
-  percent: number
-  phase?: "download" | "verify" | "install" | "done"
-  downloaded?: number
-  total?: number
-  speed?: number
-  eta?: string
-}
-
-export interface DownloadInfo {
-  key: string
-  store: "epic" | "gog" | "steam"
-  appId: string
-  name: string
-  pid?: number
-  startedAt: number
-  lastUpdate: number
-  status: "running" | "completed" | "failed" | "cancelled"
-  error?: string
-  progress: DownloadProgress
-}
-
-export interface SteamCmdStatus {
-  installed: boolean
-  managed: boolean
-  path: string | null
-  hasLogin: boolean
-  steamRoot: string | null
-  installDir: string | null
 }
 
 export interface PricePoint {
@@ -320,12 +316,16 @@ interface FliperamaState {
   removeGame: (id: string) => Promise<void>
   backends: BackendStatus[]
   auth: Record<string, AuthStatusInfo>
-  steamcmd: SteamCmdStatus | null
   authStart: (store: "epic" | "gog") => Promise<AuthStartInfo>
   authComplete: (store: "epic" | "gog", code: string) => Promise<void>
   authLogout: (store: "epic" | "gog") => Promise<void>
+  authLink: (store: "epic" | "gog") => Promise<AuthStatusInfo>
   backendDownload: (id: "legendary" | "gogdl") => Promise<void>
   backendRemove: (id: "legendary" | "gogdl") => Promise<void>
+  downloads: DownloadInfo[]
+  setDownloads: (list: DownloadInfo[]) => void
+  upsertDownload: (info: DownloadInfo) => void
+  removeDownload: (key: string) => void
   storeItems: StoreItem[] | null
   setStoreItems: (s: StoreItem[] | null) => void
   bundles: Bundle[] | null
@@ -354,13 +354,21 @@ interface FliperamaState {
   refresh: () => Promise<void>
   loadCached: () => Promise<void>
   applyLibraryRefreshed: (lib: Pick<LibraryPayload, "epic" | "gog">) => void
+  launcherExited: (id: string) => void
   install: (id: string) => Promise<void>
   play: (id: string) => Promise<void>
   uninstall: (id: string) => Promise<void>
   installGame: (game: SteamGame) => Promise<void>
   playGame: (game: SteamGame) => Promise<void>
   uninstallGame: (game: SteamGame) => Promise<void>
+  moveGame: (game: SteamGame) => Promise<void>
   applyGameArt: (id: string, art: { coverUrl?: string; bannerUrl?: string }) => void
+  wemodEnabled: string[]
+  setWemodEnabled: (id: string, on: boolean) => void
+  trainerFiles: TrainerExe[]
+  setTrainerFiles: (files: TrainerExe[]) => void
+  flingTrainer: string[]
+  setFlingTrainer: (id: string, on: boolean) => void
   update: UpdateStatus | null
   setUpdate: (u: UpdateStatus) => void
   checkUpdate: () => Promise<void>
@@ -370,10 +378,6 @@ interface FliperamaState {
   addNotification: (title: string, body: string) => void
   markNotificationsRead: () => void
   clearNotifications: () => void
-  downloads: DownloadInfo[]
-  setDownloads: (list: DownloadInfo[]) => void
-  upsertDownload: (info: DownloadInfo) => void
-  removeDownload: (key: string) => void
   kill: () => Promise<void>
   openSite: (url: string) => void
 }
@@ -394,6 +398,28 @@ function loadWishlist(): number[] {
   try {
     const raw = localStorage.getItem("fliperama-wishlist")
     if (raw) return JSON.parse(raw) as number[]
+  } catch {}
+  return []
+}
+
+function loadWemodEnabled(): string[] {
+  try {
+    const raw = localStorage.getItem("fliperama-wemod")
+    if (raw) {
+      const arr = JSON.parse(raw) as unknown[]
+      return Array.isArray(arr) ? arr.map((n) => String(n)) : []
+    }
+  } catch {}
+  return []
+}
+
+function loadFlingTrainer(): string[] {
+  try {
+    const raw = localStorage.getItem("fliperama-fling-trainer")
+    if (raw) {
+      const arr = JSON.parse(raw) as unknown[]
+      return Array.isArray(arr) ? arr.map((n) => String(n)) : []
+    }
   } catch {}
   return []
 }
@@ -473,9 +499,24 @@ export const useStore = create<FliperamaState>((set, get) => ({
   wishlist: loadWishlist(),
   hidden: loadHidden(),
   removed: [],
+  wemodEnabled: loadWemodEnabled(),
+  flingTrainer: loadFlingTrainer(),
+  trainerFiles: [],
   backends: [],
   auth: {},
-  steamcmd: null,
+  downloads: [],
+  setDownloads: (downloads) => set({ downloads }),
+  upsertDownload: (info) =>
+    set((s) => {
+      const exists = s.downloads.some((d) => d.key === info.key)
+      return {
+        downloads: exists
+          ? s.downloads.map((d) => (d.key === info.key ? info : d))
+          : [info, ...s.downloads],
+      }
+    }),
+  removeDownload: (key) =>
+    set((s) => ({ downloads: s.downloads.filter((d) => d.key !== key) })),
 
   toggleFavorite: (id) => {
     set((s) => {
@@ -647,25 +688,11 @@ export const useStore = create<FliperamaState>((set, get) => ({
   markNotificationsRead: () =>
     set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
   clearNotifications: () => set({ notifications: [] }),
-  downloads: [],
-  setDownloads: (downloads) => set({ downloads }),
-  upsertDownload: (info) =>
-    set((s) => {
-      const idx = s.downloads.findIndex((d) => d.key === info.key)
-      if (idx >= 0) {
-        const next = [...s.downloads]
-        next[idx] = info
-        return { downloads: next }
-      }
-      return { downloads: [info, ...s.downloads] }
-    }),
-  removeDownload: (key) =>
-    set((s) => ({ downloads: s.downloads.filter((d) => d.key !== key) })),
 
   refresh: async () => {
     set({ status: translate(get().locale, "launchers.status.refreshing") })
     try {
-      const [launchers, games, steam, protons, prefixes, running, stats, hidden, backends, library, steamcmd, removed] =
+      const [launchers, games, steam, protons, prefixes, running, stats, hidden, backends, library, removed, downloads] =
         await Promise.all([
           window.api.listLaunchers(),
           window.api.steamGames(),
@@ -677,8 +704,8 @@ export const useStore = create<FliperamaState>((set, get) => ({
           window.api.hiddenGet(),
           window.api.backendStatus(),
           window.api.libraryGamesCached(),
-          window.api.steamCmdStatus(),
           window.api.removedGet(),
+          window.api.downloadsList(true),
         ])
       const removedSet = new Set(removed)
       const steamFiltered = games.filter((g) => !removedSet.has(g.id))
@@ -697,7 +724,7 @@ export const useStore = create<FliperamaState>((set, get) => ({
         hidden,
         removed,
         backends,
-        steamcmd,
+        downloads,
         auth: { epic: authEpic, gog: authGog },
         status: "ok",
       })
@@ -714,6 +741,12 @@ export const useStore = create<FliperamaState>((set, get) => ({
     })
   },
 
+  launcherExited: (id) =>
+    set((s) => ({
+      running: false,
+      launchers: s.launchers.map((l) => (l.id === id ? { ...l, running: false } : l)),
+    })),
+
   authStart: async (store) => {
     const info = await window.api.authLoginUrl(store)
     void window.api.openExternal(info.url)
@@ -728,6 +761,13 @@ export const useStore = create<FliperamaState>((set, get) => ({
   authLogout: async (store) => {
     await window.api.authLogout(store)
     void get().refresh()
+  },
+
+  authLink: async (store) => {
+    const status = await window.api.authLogin(store)
+    set((s) => ({ auth: { ...s.auth, [store]: status } }))
+    void get().refresh()
+    return status
   },
 
   backendDownload: async (id) => {
@@ -779,16 +819,6 @@ export const useStore = create<FliperamaState>((set, get) => ({
 
   installGame: async (game) => {
     if (game.store === "steam") {
-      const sc = get().steamcmd
-      if (sc?.installed && sc.hasLogin) {
-        set({ status: translate(get().locale, "library.status.installingBackend", { name: game.name }) })
-        try {
-          await window.api.steamCmdInstallGame(game.appid as number, game.name)
-        } catch (e) {
-          set({ status: translate(get().locale, "common.error", { message: (e as Error).message }) })
-        }
-        return
-      }
       set({ status: translate(get().locale, "library.status.sendingInstall", { appid: game.appid ?? "" }) })
       try {
         await window.api.steamInstall(game.appid as number)
@@ -798,10 +828,20 @@ export const useStore = create<FliperamaState>((set, get) => ({
       }
       return
     }
-    set({ status: translate(get().locale, "library.status.installingBackend", { name: game.name }) })
+    if (game.store === "epic") {
+      set({ status: translate(get().locale, "library.status.sendingInstall", { appid: game.name }) })
+      try {
+        await window.api.launcherInstallGame({ store: "epic", appName: game.appName })
+        set({ status: translate(get().locale, "library.status.installSent", { appid: game.name }) })
+      } catch (e) {
+        set({ status: translate(get().locale, "common.error", { message: (e as Error).message }) })
+      }
+      return
+    }
+    // GOG: download via gogdl (progresso em downloads.*; concluído → refresh).
+    set({ status: translate(get().locale, "library.status.downloading", { name: game.name }) })
     try {
-      if (game.store === "epic") await window.api.libraryInstallEpic(game.appName as string, game.name)
-      else await window.api.libraryInstallGog(game.appid as number, game.name)
+      await window.api.libraryInstallGog(game.appid as number, game.name)
     } catch (e) {
       set({ status: translate(get().locale, "common.error", { message: (e as Error).message }) })
     }
@@ -809,12 +849,86 @@ export const useStore = create<FliperamaState>((set, get) => ({
 
   playGame: async (game) => {
     try {
-      if (game.store === "steam") {
+      // Fling trainer: se ativado para o jogo E há um trainer na pasta que
+      // cruza com o nome, roda-o no prefixo do jogo junto do play.
+      if (get().flingTrainer.includes(game.id)) {
+        const trainer = matchTrainer(game.name, get().trainerFiles)
+        if (trainer) {
+          let pref = game.prefix
+          if (!pref) {
+            pref = await window.api.resolveTrainerPrefix({
+              store: game.store as "epic" | "gog" | "steam",
+              prefix: game.prefix,
+              appid: game.appid,
+            })
+          }
+          if (pref) {
+            void window.api.runTrainer(pref, trainer.path, []).catch((e) => {
+              console.error("[fling] trainer falhou:", (e as Error).message)
+            })
+          }
+        }
+      }
+      // WeMod por jogo: prepara prefixo .NET + lança jogo e WeMod juntos.
+      if (get().wemodEnabled.includes(game.id)) {
+        if (game.store === "epic" && game.id) {
+          await window.api.wemodPlay({
+            id: game.id,
+            store: "epic",
+            name: game.name,
+            installed: game.installed,
+            coverUrl: game.coverUrl,
+            installDir: game.installDir,
+            exe: game.exe,
+            prefix: game.prefix,
+            productId: undefined,
+            appName: game.appName,
+          })
+        } else if (game.store === "gog" && game.id) {
+          await window.api.wemodPlay({
+            id: game.id,
+            store: "gog",
+            name: game.name,
+            installed: game.installed,
+            coverUrl: game.coverUrl,
+            installDir: game.installDir,
+            exe: game.exe,
+            prefix: game.prefix,
+            productId: game.appid,
+            appName: undefined,
+          })
+        } else if (game.store === "steam" && game.id) {
+          await window.api.wemodPlay({
+            id: game.id,
+            store: "steam",
+            name: game.name,
+            installed: game.installed,
+            coverUrl: game.coverUrl,
+            installDir: game.installDir,
+            exe: game.exe,
+            prefix: game.prefix,
+            productId: undefined,
+            appName: undefined,
+          })
+        } else {
+          throw new Error(`store sem suporte a WeMod: ${game.store}`)
+        }
+      } else if (game.store === "steam") {
         await window.api.steamPlay(game.appid as number)
       } else if (game.store === "epic") {
-        await window.api.libraryPlayEpic(game as never)
-      } else {
-        await window.api.libraryPlayGog(game as never)
+        await window.api.launcherPlayGame({ store: "epic", appName: game.appName })
+      } else if (game.store === "gog") {
+        await window.api.libraryPlayGog({
+          id: game.id,
+          store: "gog",
+          name: game.name,
+          installed: game.installed,
+          coverUrl: game.coverUrl,
+          installDir: game.installDir,
+          exe: game.exe,
+          prefix: game.prefix,
+          productId: game.appid,
+        })
       }
       set({ running: true, status: translate(get().locale, "library.status.starting", { appid: game.name }) })
     } catch (e) {
@@ -838,7 +952,7 @@ export const useStore = create<FliperamaState>((set, get) => ({
     if (game.store === "epic") {
       set({ status: translate(get().locale, "library.status.uninstalling", { appid: game.name }) })
       try {
-        await window.api.libraryUninstallEpic(game.appName as string)
+        await window.api.launcherUninstallGame({ store: "epic", appName: game.appName })
         set({ status: translate(get().locale, "library.status.uninstalled", { appid: game.name }) })
       } catch (e) {
         set({ status: translate(get().locale, "common.error", { message: (e as Error).message }) })
@@ -846,17 +960,31 @@ export const useStore = create<FliperamaState>((set, get) => ({
       void get().refresh()
       return
     }
-    if (game.store === "gog") {
-      set({ status: translate(get().locale, "library.status.uninstalling", { appid: game.name }) })
-      try {
-        await window.api.libraryUninstallGog(game.appid as number, game.installDir)
-        set({ status: translate(get().locale, "library.status.uninstalled", { appid: game.name }) })
-      } catch (e) {
-        set({ status: translate(get().locale, "common.error", { message: (e as Error).message }) })
-      }
-      void get().refresh()
-      return
+    if (game.store !== "gog") return
+    set({ status: translate(get().locale, "library.status.uninstalling", { appid: game.name }) })
+    try {
+      await window.api.libraryUninstallGog(game.appid as number, game.installDir)
+      set({ status: translate(get().locale, "library.status.uninstalled", { appid: game.name }) })
+    } catch (e) {
+      set({ status: translate(get().locale, "common.error", { message: (e as Error).message }) })
     }
+    void get().refresh()
+  },
+
+  moveGame: async (game) => {
+    if (game.store !== "gog" || !game.installDir) return
+    set({ status: translate(get().locale, "library.status.moving", { appid: game.name }) })
+    try {
+      const res = await window.api.libraryMoveGog(game.appid as number, game.installDir)
+      if (!res) {
+        set({ status: translate(get().locale, "library.status.moveCanceled", { appid: game.name }) })
+        return
+      }
+      set({ status: translate(get().locale, "library.status.moved", { appid: game.name }) })
+    } catch (e) {
+      set({ status: translate(get().locale, "common.error", { message: (e as Error).message }) })
+    }
+    void get().refresh()
   },
 
   applyGameArt: (id, art) => {
@@ -866,6 +994,28 @@ export const useStore = create<FliperamaState>((set, get) => ({
       if (art.bannerUrl !== undefined) patch.bannerUrl = art.bannerUrl
       if (Object.keys(patch).length === 0) return {}
       return { games: s.games.map((g) => (g.id === id ? { ...g, ...patch } : g)) }
+    })
+  },
+
+  setWemodEnabled: (id, on) => {
+    set((s) => {
+      const next = on
+        ? Array.from(new Set([...s.wemodEnabled, id]))
+        : s.wemodEnabled.filter((g) => g !== id)
+      try { localStorage.setItem("fliperama-wemod", JSON.stringify(next)) } catch {}
+      return { wemodEnabled: next }
+    })
+  },
+
+  setTrainerFiles: (trainerFiles) => set({ trainerFiles }),
+
+  setFlingTrainer: (id, on) => {
+    set((s) => {
+      const next = on
+        ? Array.from(new Set([...s.flingTrainer, id]))
+        : s.flingTrainer.filter((g) => g !== id)
+      try { localStorage.setItem("fliperama-fling-trainer", JSON.stringify(next)) } catch {}
+      return { flingTrainer: next }
     })
   },
 

@@ -1,0 +1,172 @@
+/* Phase 2.1 — application shell only.
+ * All colors and spacing are consumed from tokens.css.
+ * No component behavior or layout contract is changed here.
+ */
+
+body {
+  background: var(--fl-gradient-page);
+  color: var(--fl-content-primary);
+  font-family: var(--fl-font-interface);
+}
+
+.app {
+  background: var(--fl-gradient-page);
+}
+
+.topbar {
+  background: var(--fl-dark-7-5-13-a96);
+  border-bottom-color: var(--fl-border-subtle);
+  border-radius: 0;
+}
+
+.topbar-logo {
+  filter: drop-shadow(var(--fl-shadow-logo-filter));
+}
+
+.search {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-secondary);
+}
+
+.search:focus-within {
+  border-color: var(--fl-focus-ring);
+  box-shadow: var(--fl-focus-control);
+}
+
+.search input {
+  color: var(--fl-content-primary);
+}
+
+.search input::placeholder,
+.search kbd,
+.search-clear,
+.icon-btn,
+.win-btn {
+  color: var(--fl-content-secondary);
+}
+
+.search kbd {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-border-subtle);
+}
+
+.search-clear:hover,
+.icon-btn:hover,
+.win-btn:hover {
+  background: var(--fl-white-a06);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-primary);
+}
+
+.win-btn.close:hover {
+  background: var(--fl-state-danger);
+  color: var(--fl-color-white);
+}
+
+.badge-count,
+.badge-dot.update {
+  background: var(--fl-gradient-brand);
+  color: var(--fl-color-white);
+}
+
+.body,
+.content-stack,
+.main {
+  background: transparent;
+}
+
+.left-panel {
+  background: var(--fl-dark-7-5-13-a62);
+  border-right-color: var(--fl-border-subtle);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.nav-label {
+  color: var(--fl-color-neutral-09);
+  letter-spacing: var(--fl-tracking-label);
+}
+
+.nav-item {
+  color: var(--fl-color-neutral-14);
+}
+
+.nav-item:hover {
+  background: var(--fl-white-a04);
+  color: var(--fl-content-primary);
+}
+
+.nav-item.active {
+  background: var(--fl-gradient-active-strong);
+  color: var(--fl-color-white);
+  box-shadow: none;
+}
+
+.launcher-status {
+  background: var(--fl-white-a025);
+  border-color: var(--fl-border-subtle);
+}
+
+.launcher-status-head {
+  color: var(--fl-content-secondary);
+}
+
+.dot-online,
+.footer-dot.green,
+.footer-ok::before {
+  background: var(--fl-state-success);
+  box-shadow: var(--fl-glow-success-12);
+}
+
+.btn-kill {
+  background: var(--fl-state-danger-soft);
+  border-color: var(--fl-state-danger);
+  color: var(--fl-state-danger);
+}
+
+.btn-kill:hover {
+  background: var(--fl-state-danger-hover);
+}
+
+.footer {
+  background: var(--fl-dark-7-5-13-a96);
+  border-top-color: var(--fl-border-subtle);
+  border-radius: 0;
+  color: var(--fl-color-neutral-09);
+}
+
+.footer-version,
+.footer-item b,
+.footer-status {
+  color: var(--fl-color-neutral-14);
+}
+
+.footer-ok {
+  color: var(--fl-state-success);
+}
+
+.footer-dot.purple {
+  background: var(--fl-accent-secondary);
+  box-shadow: var(--fl-glow-purple-status);
+}
+
+.footer-dot.cyan {
+  background: var(--fl-accent-info);
+  box-shadow: var(--fl-glow-cyan-status);
+}
+
+.window-controls {
+  border-left-color: var(--fl-border-subtle);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search,
+  .search-clear,
+  .icon-btn,
+  .nav-item,
+  .btn-kill,
+  .win-btn {
+    transition: none;
+  }
+}

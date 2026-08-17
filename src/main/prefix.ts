@@ -53,6 +53,10 @@ export function listPrefixes(): PrefixInfo[] {
   try {
     for (const entry of readdirSync(rootDir(), { withFileTypes: true })) {
       if (!entry.isDirectory()) continue
+      // Jogos Steam rodam em prefixos isolados (compatdata/<appid>/pfx), não
+      // na raiz do Fliperama — pastas `steam-*` aqui são resíduos antigos e
+      // não devem ser listadas/gerenciadas.
+      if (entry.name.startsWith("steam-")) continue
       const path = join(rootDir(), entry.name)
       out.push({ name: entry.name, path, created: statSync(path).birthtime.toISOString() })
     }

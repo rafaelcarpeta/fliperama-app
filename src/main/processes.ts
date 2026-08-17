@@ -31,7 +31,7 @@ const STATE_DIR = join(homedir(), ".local", "state", "fliperama")
 const STATE_FILE = join(STATE_DIR, "running.json")
 
 const children = new Map<string, ChildProcess>()
-let onExit: ((code: number | null) => void) | null = null
+let onExit: ((key: string, code: number | null) => void) | null = null
 let stateCache: RunningMap | null = null
 
 export interface StartResult {
@@ -41,7 +41,7 @@ export interface StartResult {
 export interface StartOptions {
   mode?: string
   prefix?: string
-  onExit?: (code: number | null) => void
+  onExit?: (key: string, code: number | null) => void
   preLaunch?: string
   postLaunch?: string
 }
@@ -62,7 +62,7 @@ function persistState(): void {
   void enqueueWrite(STATE_FILE, JSON.stringify(stateCache, null, 2), { mode: 0o600 })
 }
 
-export function setExitHandler(handler: (code: number | null) => void): void {
+export function setExitHandler(handler: (key: string, code: number | null) => void): void {
   onExit = handler
 }
 
@@ -83,6 +83,42 @@ export function unregister(key: string): void {
 
 export function isRunning(): boolean {
   return children.size > 0
+}
+
+/** Verifica se a key está ativa: vivo no Map `children` ou pid vivo em `running.json`. */
+export function isKeyRunning(key: string): boolean {
+  if (children.has(key)) return true
+  const state = loadState()
+  const entry = state[key]
+  if (!entry?.pid) return false
+  try {
+    process.kill(entry.pid, 0)
+    return true
+  } catch (err: unknown) {
+    // EPERM (pid existe mas sem permissão de sinalização) conta como vivo.
+    if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'EPERM') return true
+    // ESRCH (pid não existe) → morto.
+    return false
+  }
+}
+
+/** Verifica se há processo vivo com o prefixo informado (ex.: jogo aberto no
+ * prefixo do launcher via umu-cmd-* enquanto o launcher em si usa outra key). */
+export function isPrefixRunning(prefix: string): boolean {
+  if (!prefix) return false
+  const state = loadState()
+  for (const key of Object.keys(state)) {
+    const entry = state[key]
+    if (!entry?.pid || entry.prefix !== prefix) continue
+    if (children.has(key)) return true
+    try {
+      process.kill(entry.pid, 0)
+      return true
+    } catch (err: unknown) {
+      if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'EPERM') return true
+    }
+  }
+  return false
 }
 
 export function runningMap(): RunningMap {
@@ -141,9 +177,9 @@ export function start(
   child.on("exit", (code) => {
     children.delete(key)
     unregister(key)
-    console.log(`[${binary}] processo encerrado code=${code}`)
-    onExit?.(code)
-    opts.onExit?.(code)
+    console.log(`[${binary}] processo encerrado key="${key}" code=${code}`)
+    onExit?.(key, code)
+    opts.onExit?.(key, code)
     if (opts.postLaunch?.trim()) {
       console.log(`[scripts] postLaunch (${key})`)
       void execShell(opts.postLaunch)

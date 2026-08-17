@@ -1,0 +1,214 @@
+/* Phase 2.4 — Store and promotions. */
+
+.main:has(.store-promo-grid, .price-table) .page-title h2 {
+  color: var(--fl-content-primary);
+  font-family: var(--fl-font-display);
+  font-weight: var(--fl-font-weight-display);
+  letter-spacing: var(--fl-tracking-display);
+}
+
+.main:has(.store-promo-grid, .price-table) .count-badge {
+  background: var(--fl-pink-a08);
+  border-color: var(--fl-pink-a17);
+  color: var(--fl-accent-brand);
+}
+
+.main:has(.store-promo-grid, .price-table) .page-tools .ghost-btn {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-white-a10);
+  color: var(--fl-content-secondary);
+  box-shadow: none;
+}
+
+.main:has(.store-promo-grid, .price-table) .page-tools .ghost-btn:hover:not(:disabled) {
+  background: var(--fl-gradient-active);
+  border-color: var(--fl-pink-a17);
+  color: var(--fl-content-primary);
+}
+
+.store-section-title {
+  color: var(--fl-content-primary);
+  font-family: var(--fl-font-display);
+  font-weight: var(--fl-font-weight-display);
+  letter-spacing: var(--fl-tracking-display);
+}
+
+.promo-card {
+  background: var(--fl-gradient-panel);
+  border-color: var(--fl-border-subtle);
+}
+
+.promo-card:hover {
+  border-color: var(--fl-pink-a24);
+  box-shadow: var(--fl-outline-card-hover);
+}
+
+.promo-badge,
+.promo-lowest-badge {
+  background: var(--fl-success-a10);
+  color: var(--fl-state-success);
+  box-shadow: none;
+}
+
+.promo-newlow-badge {
+  animation: none;
+  background: var(--fl-state-danger-soft);
+  color: var(--fl-state-danger);
+  box-shadow: none;
+}
+
+.promo-name {
+  color: var(--fl-content-primary);
+}
+
+.promo-price,
+.price-sale {
+  color: var(--fl-state-success);
+}
+
+.hero-banner {
+  background: var(--fl-gradient-store-hero);
+  border-color: var(--fl-white-a10);
+  backdrop-filter: none;
+  box-shadow: var(--fl-shadow-default);
+  font-family: var(--fl-font-interface);
+}
+
+.hero-banner:hover {
+  border-color: var(--fl-pink-a24);
+  box-shadow: var(--fl-shadow-brand);
+}
+
+.hero-highlight-dark,
+.hero-dark-highlight {
+  background: var(--fl-gradient-store-hero);
+}
+
+.hero-kicker {
+  color: var(--fl-color-neutral-16);
+}
+
+.hero-kicker-icon {
+  color: var(--fl-accent-highlight);
+}
+
+.hero-logo,
+.hero-chip {
+  background: var(--fl-white-a12);
+  border-color: var(--fl-white-a15);
+}
+
+.hero-chip {
+  color: var(--fl-color-white);
+  backdrop-filter: none;
+}
+
+.hero-title {
+  color: var(--fl-color-white);
+  text-shadow: var(--fl-text-shadow-title);
+}
+
+.hero-cta {
+  background: var(--fl-color-white);
+  color: var(--fl-color-bg);
+  box-shadow: var(--fl-shadow-brand);
+}
+
+.hero-cta:hover {
+  box-shadow: var(--fl-shadow-brand-hover);
+}
+
+.hero-collage-img {
+  border-color: var(--fl-white-a15);
+  box-shadow: var(--fl-shadow-default);
+}
+
+.hero-overlay {
+  background: var(--fl-gradient-cover-overlay);
+}
+
+.hero-art-fallback {
+  color: var(--fl-color-neutral-09);
+}
+
+.hero-dot {
+  background: var(--fl-white-a15);
+}
+
+.hero-dot.active {
+  background: var(--fl-gradient-brand);
+}
+
+.hero-dot:hover:not(.active) {
+  background: var(--fl-white-a14);
+}
+
+.price-table {
+  background: var(--fl-white-a018);
+  border-color: var(--fl-border-subtle);
+}
+
+.price-table th {
+  background: var(--fl-white-a025);
+  color: var(--fl-color-neutral-11);
+}
+
+.price-table th,
+.price-table td {
+  border-bottom-color: var(--fl-border-subtle);
+}
+
+.price-table tbody tr:hover {
+  background: var(--fl-white-a03);
+}
+
+.price-table tr.row-sale td {
+  border-left-color: var(--fl-state-success);
+}
+
+.discount-badge {
+  background: var(--fl-success-a08);
+  border-color: var(--fl-success-a12);
+  color: var(--fl-state-success);
+}
+
+.lowest-badge {
+  background: var(--fl-pink-a08);
+  border-color: var(--fl-pink-a17);
+  color: var(--fl-accent-brand);
+}
+
+.reseller-link {
+  color: var(--fl-accent-info);
+}
+
+.reseller-shop {
+  color: var(--fl-color-neutral-09);
+}
+
+.fav-mini {
+  background: var(--fl-white-a018);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-secondary);
+}
+
+.fav-mini:hover,
+.fav-mini.on {
+  background: var(--fl-yellow-a09);
+  border-color: var(--fl-accent-highlight);
+  color: var(--fl-accent-highlight);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .promo-card,
+  .hero-banner,
+  .hero-collage-img,
+  .hero-cta,
+  .hero-cta-arrow,
+  .hero-dot,
+  .price-table tbody tr,
+  .fav-mini {
+    animation: none;
+    transition: none;
+  }
+}

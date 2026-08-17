@@ -6,7 +6,10 @@ release
 log.txt
 netlog.txt
 *.tsbuildinfo
+tmp/
+*.diff
 images
+site images/
 *.md
 !README.md
 site/

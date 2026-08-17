@@ -1,20 +1,20 @@
-import { spawn, execFile } from "node:child_process"
-import { existsSync, readFileSync } from "node:fs"
-import { mkdir, readFile, readdir } from "node:fs/promises"
-import { basename, join } from "node:path"
+import { execFile, spawn } from "node:child_process"
+import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs"
+import { readdir, mkdir, cp, rename, rm } from "node:fs/promises"
+import { join, basename } from "node:path"
 import { app } from "electron"
 import * as backends from "./backends"
 import * as auth from "./auth"
 import { getValidGogToken } from "./gogToken"
 import * as art from "./art"
-import * as umu from "./umu"
-import * as launcherConfig from "./launcherConfig"
-import * as processes from "./processes"
 import * as libraryCache from "./libraryCache"
-import { getRemoved } from "./settings"
+import { getKey as settingsGetKey, setKey as settingsSetKey, getRemoved } from "./settings"
 import { enqueueWrite } from "./atomic"
 import { mapWithConcurrency } from "./pool"
 import { prefixDir } from "./prefix"
+import * as processes from "./processes"
+import * as umu from "./umu"
+import * as launcherConfig from "./launcherConfig"
 import { perfLog } from "./perf"
 
 // Bibliotecas não-Steam via backends (padrão Heroic):
@@ -75,6 +75,80 @@ function readEpicMetadata(appName: string): EpicMetadata | null {
   }
 }
 
+// -------------------------------------------------- launcher nativo Epic ---
+
+// Um único jogo instalado: campos compatíveis entre o `list-installed` do
+// legendary e os `.item` do launcher nativo.
+interface EpicInstall {
+  install_path: string
+  version?: string
+  install_size?: number
+  executable?: string
+}
+
+// Converte um caminho Windows ("C:\\Program Files\\Epic Games\\TwentyXX")
+// para o caminho real dentro do prefixo ("<prefix>/drive_c/...").
+function winePathToLinux(prefix: string, winPath: string): string {
+  const m = /^([A-Za-z]):\\?(.*)$/.exec(winPath.replace(/\//g, "\\"))
+  if (!m || !m[2]) return winPath
+  const drive = m[1].toLowerCase()
+  const rest = m[2].split("\\").filter(Boolean)
+  if (rest.length === 0) return prefix
+  return join(prefix, drive === "c" ? "drive_c" : `drive_${drive}`, ...rest)
+}
+
+// Jogos instalados pelo launcher nativo Epic no prefixo UMU. O launcher (e
+// não o legendary) é a fonte de verdade aqui: a cada instalação concluída ele
+// grava `<InstallationGuid>.item` em ProgramData/Epic/EpicGamesLauncher/Data/
+// Manifests/ com AppName, DisplayName, InstallLocation, LaunchExecutable e
+// InstallSize. O `.item` é removido ao desinstalar e marcado
+// `bIsIncompleteInstall: true` durante o download — por isso esses são
+// ignorados.
+function epicLauncherInstalled(): Map<string, EpicInstall> {
+  const out = new Map<string, EpicInstall>()
+  const dir = join(
+    prefixDir("epic"),
+    "drive_c",
+    "ProgramData",
+    "Epic",
+    "EpicGamesLauncher",
+    "Data",
+    "Manifests"
+  )
+  let entries: import("node:fs").Dirent[]
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    // launcher nativo não instalado ou sem jogos
+    return out
+  }
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.toLowerCase().endsWith(".item")) continue
+    try {
+      const j = JSON.parse(readFileSync(join(dir, e.name), "utf8")) as {
+        AppName?: unknown
+        bIsIncompleteInstall?: unknown
+        InstallLocation?: unknown
+        LaunchExecutable?: unknown
+        InstallSize?: unknown
+      }
+      const appName = typeof j.AppName === "string" ? j.AppName : ""
+      if (!appName || j.bIsIncompleteInstall === true) continue
+      out.set(appName, {
+        install_path:
+          typeof j.InstallLocation === "string"
+            ? winePathToLinux(prefixDir("epic"), j.InstallLocation)
+            : "",
+        executable: typeof j.LaunchExecutable === "string" ? j.LaunchExecutable : undefined,
+        install_size: typeof j.InstallSize === "number" ? j.InstallSize : undefined,
+      })
+    } catch {
+      // `.item` ilegível ou em transição — ignora
+    }
+  }
+  return out
+}
+
 function runBin(
   bin: string,
   args: string[],
@@ -97,6 +171,13 @@ function runBin(
 }
 
 // Biblioteca da conta Epic (inclui jogos resgatados via Amazon Prime Gaming).
+// ⚠️ Validação empírica 2026-08-14 (Tarefa 2b da Fase 15): `legendary list
+// --json` e `entitlements.json` NÃO expõem marcador confiável de resgate via
+// Amazon/Prime (o output só tem catalog metadata + asset info; ocorrências de
+// "amazon/prime" são falsos positivos: build_version "++Prime+Update…",
+// "Snakebird Primer", etc.). Sem marcador confiável, NÃO filtramos Amazon aqui
+// (evita denylist manual de AppNames, que não escala). Suporte à Amazon virá
+// com a integração Nile (futura).
 export async function epicLibrary(): Promise<BackendGame[]> {
   const t0 = performance.now()
   const bin = backends.binPath("legendary")
@@ -115,16 +196,25 @@ export async function epicLibrary(): Promise<BackendGame[]> {
   } catch {
     return []
   }
-  const installed = new Map<string, { install_path: string; version?: string }>()
+  const installed = new Map<string, EpicInstall>()
   try {
     const { stdout: iout } = await runBin(bin, ["list-installed", "--json"], {
       XDG_CONFIG_HOME: legendaryDataDir(),
     })
-    const arr = JSON.parse(iout) as { app_name: string; install_path: string; version?: string }[]
+    const arr = JSON.parse(iout) as {
+      app_name: string
+      install_path: string
+      version?: string
+      install_size?: number
+      executable?: string
+    }[]
     for (const g of arr) installed.set(g.app_name, g)
   } catch {
     // nenhum instalado
   }
+  // Jogos instalados pelo launcher nativo (não aparecem no legendary).
+  // Legendary tem prioridade; o launcher é o fallback.
+  const launcherInstalled = epicLauncherInstalled()
 
   const out: BackendGame[] = []
   for (const raw of list) {
@@ -133,7 +223,7 @@ export async function epicLibrary(): Promise<BackendGame[]> {
     if (removedEpic.has(appName)) continue
     const meta = (raw.metadata ?? readEpicMetadata(appName)) as EpicMetadata | null
     const title = String(raw.app_title ?? meta?.title ?? appName)
-    const install = installed.get(appName)
+    const install = installed.get(appName) ?? launcherInstalled.get(appName)
     // Arte custom tem prioridade; cover padrão usa o box retrato (DieselGameBoxTall —
     // o DieselGameBox é paisagem e estoura o card 2:3), com fallback para stacked/box.
     const key = art.gameArtKey(`epic:${appName}`)
@@ -150,7 +240,8 @@ export async function epicLibrary(): Promise<BackendGame[]> {
       coverUrl: cover,
       bannerUrl: banner,
       installDir: install?.install_path,
-      sizeGb: install ? 0 : undefined,
+      sizeGb: install?.install_size ? Math.max(1, Math.round(install.install_size / 1024 ** 3)) : undefined,
+      exe: install?.executable,
       prefix: prefixDir("epic"),
       appName,
     })
@@ -367,10 +458,50 @@ interface GogInstalled {
 async function gogInstalledProducts(): Promise<Map<number, GogInstalled>> {
   const out = new Map<number, GogInstalled>()
   const dirs = new Set<string>([backends.gamesDir(), join(app.getPath("home"), "Games")])
+  // Dirs extras registrados ao "mover instalação" (jogo realocado p/ outro
+  // disco/local fora dos defaults) — o scan por goggame-<id>.info re-detecta.
+  for (const extra of gogExtraScanDirs()) dirs.add(extra)
   for (const base of dirs) {
     await scanGogInstalled(base, out, 3)
   }
+  // Jogos instalados pelo GOG Galaxy dentro do prefixo (source de verdade do
+  // launcher). Galaxy marca cada jogo com goggame-<id>.info no C:; a varredura
+  // pula as árvores de sistema (enormes/lentas), que nunca contêm jogos.
+  await scanGogPrefix(out)
   return out
+}
+
+// Pastas do drive_c que nunca contêm jogos instalados — pular na varredura
+// para não enumerar árvores gigantes (windows/, users/, Program Files/...).
+const GOG_PREFIX_SKIP = new Set([
+  "windows",
+  "users",
+  "Program Files",
+  "Program Files (x86)",
+  "openxr",
+  "vrclient",
+  "proton_shortcuts",
+  "ProgramData",
+])
+
+// Varre o prefixo GOG (drive_c) buscando goggame-<id>.info, pulando as pastas
+// de sistema. A raiz do C: é varrida com profundidade limitada para cobrir o
+// default do Galaxy (C:\GOG Games) e pastas escolhidas pelo usuário.
+async function scanGogPrefix(out: Map<number, GogInstalled>): Promise<void> {
+  const base = join(prefixDir("gog"), "drive_c")
+  if (!existsSync(base)) return
+  let entries: import("node:fs").Dirent[]
+  try {
+    entries = await readdir(base, { withFileTypes: true })
+  } catch {
+    return
+  }
+  for (const e of entries) {
+    if (!e.isDirectory() || GOG_PREFIX_SKIP.has(e.name)) continue
+    await scanGogInstalled(join(base, e.name), out, 3)
+  }
+  // C:\GOG Games — folder padrão do instalador Galaxy (pode não existir).
+  await scanGogInstalled(join(base, "GOG Games"), out, 3)
 }
 
 async function scanGogInstalled(base: string, out: Map<number, GogInstalled>, depth: number): Promise<void> {
@@ -434,6 +565,307 @@ function gogExeFromInfo(infoPath: string): string | undefined {
     // info ilegível (ex.: .download) — sem exe conhecido
   }
   return undefined
+}
+
+// ---- mover instalação GOG (Gerenciar arquivos locais) ----
+
+// Diretórios-extra onde o usuário realocou jogos GOG (persistidos em settings,
+// chave "gogScanDirs" JSON). O scan `gogInstalledProducts` os cobre junto com
+// gamesDir/~/Games/prefixo — mover não reescreve manifests nem .item.
+function gogExtraScanDirs(): string[] {
+  try {
+    const raw = settingsGetKey("gogScanDirs")
+    if (!raw) return []
+    const arr = JSON.parse(raw) as unknown
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === "string") : []
+  } catch {
+    return []
+  }
+}
+
+function addGogExtraScanDir(dir: string): void {
+  const cur = gogExtraScanDirs()
+  if (!cur.includes(dir)) {
+    cur.push(dir)
+    settingsSetKey("gogScanDirs", JSON.stringify(cur))
+  }
+}
+
+// Move a pasta de instalação do jogo para `destBase/<nome-da-pasta>`.
+// Usa rename (mesmo volume); em EXDEV (cross-device) faz cópia + remoção.
+export async function moveGog(
+  productId: number,
+  installDir: string,
+  destBase: string
+): Promise<{ newDir: string }> {
+  if (!installDir || !existsSync(installDir)) {
+    throw new Error(`diretório de instalação não encontrado para o jogo GOG ${productId}`)
+  }
+  const folderName = basename(installDir)
+  const target = join(destBase, folderName)
+  if (existsSync(target)) {
+    throw new Error(`já existe uma pasta em ${target}`)
+  }
+  try {
+    await rename(installDir, target)
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code
+    if (code !== "EXDEV") throw err
+    // Cross-device: copia recursiva + remove a origem depois.
+    await cp(installDir, target, { recursive: true, errorOnExist: false })
+    await rm(installDir, { recursive: true, force: true })
+  }
+  addGogExtraScanDir(destBase)
+  return { newDir: target }
+}
+
+// ------------------------------------------------------- instalação/play ---
+
+export type DownloadPhase = "download" | "verify" | "install" | "done"
+
+export interface DownloadProgress {
+  percent: number
+  phase?: DownloadPhase
+  downloaded?: number // MiB
+  total?: number // MiB
+  speed?: number // MiB/s
+  eta?: string // HH:MM:SS
+}
+
+export interface InstallCallbacks {
+  onProgress?: (info: DownloadProgress) => void
+  onDone?: (ok: boolean, error?: string) => void
+}
+
+// Config/cache do gogdl (manifests). O gogdl assume que os arquivos estão em
+// disco se o manifest existe — mesmo que a pasta tenha sido apagada → fix da
+// Fase 10 (apagar manifest stale antes de baixar).
+function gogdlManifestDir(productId: number): string {
+  return join(backends.gogdlConfigDir(), "heroic_gogdl", "manifests", String(productId))
+}
+
+function spawnLine(
+  bin: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  onLine: (line: string) => void,
+  onExit: (code: number | null) => void,
+  key?: string
+): number | undefined {
+  const child = spawn(bin, args, { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] })
+  if (key && child.pid) {
+    processes.register(key, child.pid, { mode: "download" })
+  }
+  const handler = (d: Buffer): void => {
+    for (const line of String(d).split("\n")) {
+      const t = line.trim()
+      if (t) onLine(t)
+    }
+  }
+  child.stdout?.on("data", handler)
+  child.stderr?.on("data", handler)
+  child.on("error", (e) => {
+    console.error(`[backend] spawn error:`, e.message)
+  })
+  child.on("exit", (code) => {
+    if (key) processes.unregister(key)
+    onExit(code)
+  })
+  return child.pid
+}
+
+// gogdl 1.3.0 — emite "= Progress: 42.50 123456/290000, Running for HH:MM:SS, ETA: HH:MM:SS"
+// seguido de "= Downloaded: X MiB, Written: Y MiB" e " + Download\t- <speed> MiB/s ...".
+function parseGogLine(line: string): DownloadProgress | undefined {
+  const m = /=\s*Progress:\s*(\d+\.\d+)\s+(\d+)\/(\d+)/.exec(line)
+  if (m) {
+    const downloaded = Math.round((Number(m[2]) / 1024 / 1024) * 100) / 100
+    const total = Math.round((Number(m[3]) / 1024 / 1024) * 100) / 100
+    return {
+      percent: Number(m[1]),
+      phase: "download",
+      downloaded,
+      total,
+    }
+  }
+  const sp = /\+\s*Download\s*-\s*([\d.]+)\s*MiB\/s/.exec(line)
+  if (sp) {
+    return { percent: 0, phase: "download", speed: Number(sp[1]) }
+  }
+  const eta = /ETA:\s*(\d{1,2}:\d{2}:\d{2})/.exec(line)
+  if (eta) {
+    return { percent: 0, phase: "download", eta: eta[1] }
+  }
+  if (/All done!|Installation complete|Download complete/i.test(line)) {
+    return { percent: 100, phase: "done" }
+  }
+  return undefined
+}
+
+// Faz o merge de uma série de updates parciais em um único snapshot.
+function mergeProgress(prev: DownloadProgress, next: DownloadProgress): DownloadProgress {
+  return {
+    percent: next.percent > 0 ? next.percent : prev.percent,
+    phase: next.phase ?? prev.phase,
+    downloaded: next.downloaded ?? prev.downloaded,
+    total: next.total ?? prev.total,
+    speed: next.speed ?? prev.speed,
+    eta: next.eta ?? prev.eta,
+  }
+}
+
+export function installGog(
+  productId: number,
+  appDisplayName: string,
+  cb: InstallCallbacks = {},
+  key?: string
+): { pid: number | undefined } {
+  const bin = backends.binPath("gogdl")
+  const dir = backends.gamesDir()
+  void mkdir(dir, { recursive: true })
+  // Fix Fase 10: o gogdl mantém manifest em cache e assume que os arquivos
+  // estão em disco (mesmo que a pasta tenha sido apagada) → não baixa nada.
+  // Remove o manifest antes de cada download para garantir download do zero.
+  const manifest = gogdlManifestDir(productId)
+  if (existsSync(manifest)) {
+    try {
+      rmSync(manifest, { recursive: true, force: true })
+    } catch {
+      // segue — download pode falhar, tratado abaixo
+    }
+  }
+  let agg: DownloadProgress = { percent: 0, phase: "download" }
+  let nothingToDo = false
+  // Watchdog anti-stall (Fase 15.1): o gogdl v1.3.0 não tem read-timeout nas
+  // conexões com a CDN da GOG — uma conexão TCP meio-aberta congela o download
+  // (mesmo "Progress"/"Downloaded" repetindo, ~0 B/s) indefinidamente, com o
+  // processo vivo. Se os bytes baixados não avançarem em 90s com bytes ainda
+  // pendentes, mata o processo e reporta falha — o usuário clica Instalar de
+  // novo e o gogdl **retoma** (`.gogdl-resume` e arquivos `.download` ficam no
+  // disco; o manifest só é gravado no fim, então nada é apagado aqui).
+  const dlKey = key ?? `download-gog-${productId}`
+  const STALL_MS = 90_000
+  let stalled = false
+  let lastBytes = 0
+  let lastChange = Date.now()
+  const watchdog = setInterval(() => {
+    // Só arma após a primeira notícia de bytes; desarma quando tudo baixou
+    // (verificação final/instalação local não conta como stall).
+    const b = agg.downloaded
+    if (b === undefined || (agg.total !== undefined && b >= agg.total)) {
+      lastBytes = b ?? 0
+      lastChange = Date.now()
+      return
+    }
+    if (b === lastBytes) {
+      if (Date.now() - lastChange >= STALL_MS) {
+        console.log(
+          `[gogdl] stall detectado (${STALL_MS / 1000}s sem progresso, ${b.toFixed(1)} MiB) — encerrando key=${dlKey}`
+        )
+        clearInterval(watchdog)
+        stalled = true
+        const msg = `gogdl travado (sem progresso por ${STALL_MS / 1000}s) — clique Instalar novamente para retomar`
+        processes.killById(dlKey)
+        cb.onDone?.(false, msg)
+      }
+    } else {
+      lastBytes = b
+      lastChange = Date.now()
+    }
+  }, 5000)
+  return {
+    pid: spawnLine(
+      bin,
+      [
+        "--auth-config-path",
+        backends.gogdlAuthPath(),
+        "download",
+        String(productId),
+        "--path",
+        dir,
+        "--platform",
+        "windows",
+        "--skip-dlcs",
+      ],
+      { GOGDL_CONFIG_PATH: backends.gogdlConfigDir() },
+      (line) => {
+        const p = parseGogLine(line)
+        if (p) {
+          agg = mergeProgress(agg, p)
+          cb.onProgress?.({ ...agg })
+        }
+        console.log(`[gogdl]`, line)
+        if (/Nothing to do/i.test(line)) nothingToDo = true
+      },
+      (code) => {
+        clearInterval(watchdog)
+        // Stall já tratado pelo watchdog — não duplica o onDone no exit.
+        if (stalled) return
+        // code 0 + "Nothing to do" = manifest assumiu download completo, mas os
+        // arquivos não estão em disco. Trata como falha e remove o manifest
+        // para a próxima tentativa realmente baixar.
+        if (code === 0 && nothingToDo) {
+          try {
+            rmSync(manifest, { recursive: true, force: true })
+          } catch {
+            // segue
+          }
+          cb.onDone?.(false, `gogdl não baixou nada (manifest stale) — tente novamente`)
+        } else {
+          cb.onDone?.(code === 0, code === 0 ? undefined : `gogdl saiu com código ${code}`)
+        }
+      },
+      key
+    ),
+  }
+}
+
+// Executa um jogo via UMU/Proton no prefixo GOG (mesma infra dos launchers).
+function playViaUmu(game: BackendGame, exe: string, prefix: string): { pid: number | undefined } {
+  const config = launcherConfig.getConfig(game.store)
+  return umu.run({
+    prefix,
+    exe,
+    proton: config.proton ?? undefined,
+    gameId: `umu-${game.store}-${game.productId ?? "game"}`,
+    store: game.store,
+    envVars: config.envVars,
+    wrapGamemode: game.store === "gog",
+    wrapCpuPin: game.store === "gog",
+  })
+}
+
+export async function playGog(game: BackendGame): Promise<{ pid: number | undefined }> {
+  const exe = game.exe
+  if (!exe || !game.installDir) {
+    throw new Error(`jogo ${game.name} não instalado (pasta sem executável conhecido)`)
+  }
+  const prefix = game.prefix ?? prefixDir("gog")
+  // Sem Galaxy, garantir que o prefixo de jogo existe antes do play — o Proton
+  // inicializa o prefixo (drive_c/system.reg) via createPrefix se ausente.
+  if (!existsSync(join(prefix, "drive_c"))) {
+    const proton = launcherConfig.getConfig("gog").proton
+    await umu.createPrefix(prefix, proton ?? undefined)
+  }
+  return playViaUmu(game, join(game.installDir, exe), prefix)
+}
+
+// ------------------------------------------------------------- desinstalação ---
+
+export async function uninstallGog(productId: number, installDir?: string): Promise<void> {
+  // gogdl não tem comando nativo de uninstall — remove o diretório manualmente.
+  if (!installDir || !existsSync(installDir)) {
+    throw new Error(`diretório de instalação não encontrado para o jogo GOG ${productId}`)
+  }
+  const { rm } = await import("node:fs/promises")
+  await rm(installDir, { recursive: true, force: true })
+  // Remove também o manifest stale — senão o gogdl "reseta" o jogo na próxima
+  // instalação achando que os arquivos já estão em disco.
+  try {
+    await rm(gogdlManifestDir(productId), { recursive: true, force: true })
+  } catch {
+    // segue
+  }
 }
 
 // ------------------------------------------------------------- unificado ---
@@ -505,317 +937,29 @@ export async function libraryGamesWithCache(
   return { epic: cache.epic, gog: cache.gog, fromCache: true }
 }
 
-// ------------------------------------------------------- instalação/play ---
-
-export type DownloadPhase = "download" | "verify" | "install" | "done"
-
-export interface DownloadProgress {
-  percent: number
-  phase?: DownloadPhase
-  downloaded?: number // MiB
-  total?: number // MiB
-  speed?: number // MiB/s
-  eta?: string // HH:MM:SS
-}
-
-export interface InstallCallbacks {
-  onProgress?: (info: DownloadProgress) => void
-  onDone?: (ok: boolean, error?: string) => void
-}
-
-function spawnLine(
-  bin: string,
-  args: string[],
-  env: NodeJS.ProcessEnv,
-  onLine: (line: string) => void,
-  onExit: (code: number | null) => void,
-  key?: string
-): number | undefined {
-  const child = spawn(bin, args, { env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] })
-  if (key && child.pid) {
-    processes.register(key, child.pid, { mode: "download" })
-  }
-  const handler = (d: Buffer): void => {
-    for (const line of String(d).split("\n")) {
-      const t = line.trim()
-      if (t) onLine(t)
-    }
-  }
-  child.stdout?.on("data", handler)
-  child.stderr?.on("data", handler)
-  child.on("error", (e) => {
-    console.error(`[backend] spawn error:`, e.message)
-  })
-  child.on("exit", (code) => {
-    if (key) processes.unregister(key)
-    onExit(code)
-  })
-  return child.pid
-}
-
-// legendary 0.21.0 — DLManager emite "[DLM] INFO: = Progress: 12.34% (567/4590), Running for
-// HH:MM:SS, ETA: HH:MM:SS" seguido de "- Downloaded: X MiB, Written: Y MiB" e " + Download -
-// <speed> MiB/s ...". Aceitamos também a forma simples "Progress: 12.34%".
-function parseLegendaryLine(line: string): DownloadProgress | undefined {
-  if (/Verification progress:/.test(line)) {
-    const m = /^Verification progress:\s*(\d+)\/(\d+)\s*\((\d+\.\d+)%\)\s*\[(\d+\.\d+)\s*MiB\/s\]/.exec(line)
-    if (m) {
-      return { percent: Number(m[3]), phase: "verify", speed: Number(m[4]) }
-    }
-  }
-  const m = /=\s*Progress:\s*(\d+\.\d+)%\s*(?:\((\d+)\/(\d+)\))?/.exec(line)
-  if (m) {
-    return {
-      percent: Number(m[1]),
-      phase: "download",
-      ...(m[2] && m[3]
-        ? { downloaded: undefined, total: undefined } // chunks, não MiB
-        : {}),
-    }
-  }
-  const dl = /Downloaded:\s*([\d.]+)\s*MiB,\s*Written:\s*([\d.]+)\s*MiB/.exec(line)
-  if (dl) {
-    return {
-      percent: 0,
-      phase: "download",
-      downloaded: Number(dl[1]),
-      total: Number(dl[2]),
-    }
-  }
-  const sp = /\+\s*Download\s*-\s*([\d.]+)\s*MiB\/s/.exec(line)
-  if (sp) {
-    return { percent: 0, phase: "download", speed: Number(sp[1]) }
-  }
-  const eta = /ETA:\s*(\d{1,2}:\d{2}:\d{2})/.exec(line)
-  if (eta) {
-    return { percent: 0, phase: "download", eta: eta[1] }
-  }
-  if (/All done!|Installation finished|Finished installation/i.test(line)) {
-    return { percent: 100, phase: "done" }
-  }
-  return undefined
-}
-
-// gogdl 1.3.0 — emite "= Progress: 42.50 123456/290000, Running for HH:MM:SS, ETA: HH:MM:SS"
-// seguido de "= Downloaded: X MiB, Written: Y MiB" e " + Download\t- <speed> MiB/s ...".
-function parseGogLine(line: string): DownloadProgress | undefined {
-  const m = /=\s*Progress:\s*(\d+\.\d+)\s+(\d+)\/(\d+)/.exec(line)
-  if (m) {
-    const downloaded = Math.round(Number(m[2]) / 1024 / 1024 * 100) / 100
-    const total = Math.round(Number(m[3]) / 1024 / 1024 * 100) / 100
-    return {
-      percent: Number(m[1]),
-      phase: "download",
-      downloaded,
-      total,
-    }
-  }
-  const sp = /\+\s*Download\s*-\s*([\d.]+)\s*MiB\/s/.exec(line)
-  if (sp) {
-    return { percent: 0, phase: "download", speed: Number(sp[1]) }
-  }
-  const eta = /ETA:\s*(\d{1,2}:\d{2}:\d{2})/.exec(line)
-  if (eta) {
-    return { percent: 0, phase: "download", eta: eta[1] }
-  }
-  if (/All done!|Installation complete|Download complete/i.test(line)) {
-    return { percent: 100, phase: "done" }
-  }
-  return undefined
-}
-
-// Faz o merge de uma série de updates parciais em um único snapshot.
-function mergeProgress(prev: DownloadProgress, next: DownloadProgress): DownloadProgress {
-  return {
-    percent: next.percent > 0 ? next.percent : prev.percent,
-    phase: next.phase ?? prev.phase,
-    downloaded: next.downloaded ?? prev.downloaded,
-    total: next.total ?? prev.total,
-    speed: next.speed ?? prev.speed,
-    eta: next.eta ?? prev.eta,
-  }
-}
-
-export function installEpic(
-  appName: string,
-  appDisplayName: string,
-  cb: InstallCallbacks = {},
-  key?: string
-): { pid: number | undefined } {
-  const bin = backends.binPath("legendary")
-  const dir = backends.gamesDir()
-  void mkdir(dir, { recursive: true })
-  let agg: DownloadProgress = { percent: 0, phase: "download" }
-  return {
-    pid: spawnLine(
-      bin,
-      ["install", appName, "--base-path", dir, "--skip-dlcs", "--yes"],
-      { XDG_CONFIG_HOME: legendaryDataDir() },
-      (line) => {
-        const p = parseLegendaryLine(line)
-        if (p) {
-          agg = mergeProgress(agg, p)
-          cb.onProgress?.({ ...agg })
-        }
-        console.log(`[legendary]`, line)
-      },
-      (code) => cb.onDone?.(code === 0, code === 0 ? undefined : `legendary saiu com código ${code}`),
-      key
-    ),
-  }
-}
-
-export function installGog(
-  productId: number,
-  appDisplayName: string,
-  cb: InstallCallbacks = {},
-  key?: string
-): { pid: number | undefined } {
-  const bin = backends.binPath("gogdl")
-  const dir = backends.gamesDir()
-  void mkdir(dir, { recursive: true })
-  let agg: DownloadProgress = { percent: 0, phase: "download" }
-  return {
-    pid: spawnLine(
-      bin,
-      ["--auth-config-path", backends.gogdlAuthPath(), "download", String(productId), "--path", dir, "--platform", "windows", "--skip-dlcs"],
-      { GOGDL_CONFIG_PATH: backends.gogdlConfigDir() },
-      (line) => {
-        const p = parseGogLine(line)
-        if (p) {
-          agg = mergeProgress(agg, p)
-          cb.onProgress?.({ ...agg })
-        }
-        console.log(`[gogdl]`, line)
-      },
-      (code) => cb.onDone?.(code === 0, code === 0 ? undefined : `gogdl saiu com código ${code}`),
-      key
-    ),
-  }
-}
-
-// Executa um jogo via UMU/Proton no prefixo do launcher (mesma infra dos launchers).
-function playViaUmu(game: BackendGame, exe: string, prefix: string): { pid: number | undefined } {
-  const config = launcherConfig.getConfig(game.store)
-  const envVars = [...(game.store === "epic" ? ["PROTON_ENABLE_WAYLAND=0"] : []), ...config.envVars]
-  return umu.run({
-    prefix,
-    exe,
-    proton: config.proton ?? undefined,
-    gameId: `umu-${game.store}-${game.appName ?? game.productId ?? "game"}`,
-    store: game.store,
-    envVars,
-  })
-}
-
-export async function playEpic(game: BackendGame): Promise<{ pid: number | undefined }> {
-  if (!game.appName) throw new Error("jogo sem AppName")
-  const bin = backends.binPath("legendary")
-  // O prefixo UMU é o do *launcher* Epic (não o install_path do jogo — senão
-  // o Proton/Wine polui a pasta do título com drive_c/, system.reg etc.).
-  const prefix = game.prefix ?? prefixDir("epic")
-  // 1ª tentativa: legendary launch --dry-run --no-wine imprime a linha de
-  // comando completa (inclui args como -AUTH_LOGIN, -epicapp etc.).
-  try {
-    const { stdout } = await runBin(bin, ["launch", game.appName, "--dry-run", "--no-wine", "--offline", "--skip-version-check"], {
-      XDG_CONFIG_HOME: legendaryDataDir(),
-    })
-    const m = /Command line:\s*(.+)/.exec(stdout)
-    if (m) {
-      const parsed = parseCommandLine(m[1])
-      if (parsed.length > 0) {
-        return playViaUmu(game, parsed[0], prefix)
-      }
-    }
-  } catch (e) {
-    console.warn(`[playEpic] dry-run falhou, tentando installed.json:`, (e as Error).message)
-  }
-  // 2ª tentativa (fallback): lê installed.json direto. Útil quando o token
-  // Epic expirou momentaneamente ou o legendary tem cache stale (visto em
-  // 2026-08-09 com 20XX/Quail — `legendary launch` retornava "Game is not
-  // currently installed" mesmo com installed.json válido).
-  const installed = readInstalledJson(legendaryDataDir())
-  const entry = installed[game.appName]
-  if (entry?.executable && entry.install_path) {
-    const exe = join(entry.install_path, entry.executable)
-    if (!existsSync(exe)) {
-      throw new Error(
-        `executável não encontrado em disco: ${exe} (verifique se o jogo em ${entry.install_path} está completo)`
-      )
-    }
-    console.log(`[playEpic] usando installed.json fallback exe=${exe} prefix=${prefix}`)
-    return playViaUmu(game, exe, prefix)
-  }
-  throw new Error(
-    `não foi possível determinar o executável de ${game.name} (instale pelo Fliperama ou abra o launcher; nem legendary launch nem installed.json retornaram um exe válido)`
-  )
-}
-
-interface InstalledEntry {
-  app_name?: string
-  executable?: string
-  install_path?: string
-  launch_parameters?: string
-}
-
-function readInstalledJson(configDir: string): Record<string, InstalledEntry> {
-  try {
-    const path = join(configDir, "legendary", "installed.json")
-    if (!existsSync(path)) return {}
-    const j = JSON.parse(readFileSync(path, "utf8")) as Record<string, InstalledEntry>
-    return j && typeof j === "object" ? j : {}
-  } catch (e) {
-    console.error("[playEpic] falha ao ler installed.json:", (e as Error).message)
-    return {}
-  }
-}
-
-function parseCommandLine(line: string): string[] {
-  const trimmed = line.trim().replace(/^\[|\]$/g, "")
-  const out: string[] = []
-  const re = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\S+/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(trimmed))) {
-    out.push(m[0].replace(/^["']|["']$/g, ""))
-  }
-  return out
-}
-
-export async function playGog(game: BackendGame): Promise<{ pid: number | undefined }> {
-  const exe = game.exe
-  if (!exe || !game.installDir) throw new Error(`jogo ${game.name} não instalado (pasta sem executável conhecido)`)
-  return playViaUmu(game, join(game.installDir, exe), game.prefix ?? prefixDir("gog"))
-}
-
-// ------------------------------------------------------------- desinstalação ---
-
-export async function uninstallEpic(appName: string): Promise<void> {
-  const bin = backends.binPath("legendary")
-  if (!existsSync(bin)) throw new Error("legendary não está instalado")
-  try {
-    await runBin(bin, ["uninstall", appName, "--yes"], {
-      XDG_CONFIG_HOME: legendaryDataDir(),
-    })
-  } catch (e) {
-    throw new Error(`Falha ao desinstalar ${appName}: ${(e as Error).message}`)
-  }
-}
-
-export async function uninstallGog(productId: number, installDir?: string): Promise<void> {
-  const bin = backends.binPath("gogdl")
-  if (!existsSync(bin)) throw new Error("gogdl não está instalado")
-  
-  // gogdl não tem comando nativo de uninstall, então removemos manualmente
-  if (!installDir || !existsSync(installDir)) {
-    throw new Error(`Diretório de instalação não encontrado para o jogo GOG ${productId}`)
-  }
-  
-  try {
-    const { rm } = await import("node:fs/promises")
-    await rm(installDir, { recursive: true, force: true })
-  } catch (e) {
-    throw new Error(`Falha ao remover diretório ${installDir}: ${(e as Error).message}`)
-  }
-}
-
 export { runBin, legendaryMetadataDir, gogInstalledProducts }
+
+// Refresh forçado de um único store (Fase 16-A): não reusa `inflightRefresh`
+// antigo; busca apenas o store pedido e atualiza o cache parcial.
+let inflightRefreshEpic: Promise<BackendGame[]> | null = null
+let inflightRefreshGog: Promise<BackendGame[]> | null = null
+
+export async function refreshForStore(store: "epic" | "gog"): Promise<LibraryResult> {
+  // Invalida o refresh global deduplicado para forçar nova leitura.
+  inflightRefresh = null
+  const cache = libraryCache.read() ?? { epic: [] as BackendGame[], gog: [] as BackendGame[] }
+
+  if (store === "epic") {
+    const fetchPromise = (inflightRefreshEpic ??= epicLibrary().catch(() => [] as BackendGame[]))
+    const fresh = await fetchPromise
+    inflightRefreshEpic = null
+    libraryCache.write(fresh, cache.gog)
+    return { epic: fresh, gog: cache.gog }
+  }
+
+  const fetchPromise = (inflightRefreshGog ??= gogLibrary().catch(() => [] as BackendGame[]))
+  const fresh = await fetchPromise
+  inflightRefreshGog = null
+  libraryCache.write(cache.epic, fresh)
+  return { epic: cache.epic, gog: fresh }
+}

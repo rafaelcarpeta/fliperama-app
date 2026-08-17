@@ -501,19 +501,6 @@ export async function getGameName(appid: number): Promise<string> {
   return cache.get(appid)?.name ?? `App ${appid}`
 }
 
-// Valida uma Steam Web API key (GetServerInfo é público e não exige steamid).
-export async function testApiKey(key: string): Promise<boolean> {
-  try {
-    const url = `https://api.steampowered.com/ISteamWebAPIUtil/GetServerInfo/v1/?key=${encodeURIComponent(key)}`
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-    if (!res.ok) return false
-    const j = (await res.json()) as { servertime?: number }
-    return typeof j.servertime === "number"
-  } catch {
-    return false
-  }
-}
-
 // -------------------------------------------------- resolução de appid ---
 // Resolve o appid Steam de um jogo não-Steam (Epic/GOG) pelo nome, usando a
 // API pública de busca da loja. Cache em memória + disco (`steam-appid-resolve.json`)

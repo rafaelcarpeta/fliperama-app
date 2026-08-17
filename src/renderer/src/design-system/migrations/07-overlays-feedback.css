@@ -1,0 +1,211 @@
+/* Phase 2.7 — Modals, notifications, downloads and feedback. */
+
+.dl-mini-bar,
+.dl-summary-bar,
+.download-bar,
+.dl-bar {
+  background: var(--fl-white-a07);
+}
+
+.dl-mini-bar i,
+.dl-summary-bar i,
+.download-bar i,
+.dl-bar i {
+  background: var(--fl-gradient-progress);
+  box-shadow: none;
+}
+
+.download-panel,
+.notif-panel {
+  background: var(--fl-dark-7-5-13-a96);
+  border-color: var(--fl-border-subtle);
+  box-shadow: var(--fl-shadow-default);
+}
+
+.download-summary,
+.dropdown-head {
+  background: var(--fl-white-a025);
+  border-bottom-color: var(--fl-border-subtle);
+}
+
+.download-guard {
+  background: var(--fl-state-danger-soft);
+  border-bottom-color: var(--fl-border-subtle);
+}
+
+.download-summary-line,
+.download-name,
+.dropdown-head strong,
+.notif-head,
+.notif-item strong {
+  color: var(--fl-content-primary);
+}
+
+.dl-summary-speed,
+.download-phase,
+.notif-clear:hover {
+  color: var(--fl-accent-info);
+}
+
+.download-row,
+.dropdown-head {
+  border-bottom-color: var(--fl-border-subtle);
+}
+
+.download-store {
+  background: var(--fl-pink-a08);
+  color: var(--fl-accent-brand);
+}
+
+.download-status-running {
+  background: var(--fl-cyan-a08);
+  color: var(--fl-accent-info);
+}
+
+.download-status-completed {
+  background: var(--fl-success-a08);
+  color: var(--fl-state-success);
+}
+
+.download-status-failed,
+.download-status-cancelled {
+  background: var(--fl-state-danger-soft);
+  color: var(--fl-state-danger);
+}
+
+.download-date,
+.notif-clear,
+.notif-item time {
+  color: var(--fl-color-neutral-09);
+}
+
+.download-error {
+  color: var(--fl-state-danger);
+}
+
+.download-panel .btn.ghost,
+.notif-panel .btn.ghost {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-white-a10);
+  color: var(--fl-content-primary);
+}
+
+.notif-item {
+  background: var(--fl-white-a025);
+  border-color: var(--fl-border-subtle);
+}
+
+.notif-item:hover {
+  background: var(--fl-gradient-active);
+  border-color: var(--fl-pink-a17);
+}
+
+.notif-item span {
+  color: var(--fl-content-secondary);
+}
+
+.avatar {
+  background: var(--fl-gradient-brand);
+  color: var(--fl-color-white);
+}
+
+.art-overlay {
+  background: var(--fl-dark-8-5-13-a82);
+}
+
+.art-modal,
+.confirm-modal {
+  background: var(--fl-gradient-panel-deep);
+  border-color: var(--fl-border-control);
+  box-shadow: var(--fl-shadow-panel);
+}
+
+.art-modal-head h3 {
+  color: var(--fl-content-primary);
+  font-family: var(--fl-font-display);
+  font-weight: var(--fl-font-weight-display);
+  letter-spacing: var(--fl-tracking-display);
+}
+
+.confirm-modal p {
+  color: var(--fl-content-primary);
+}
+
+.art-search {
+  background: var(--fl-dark-6-5-12-a44);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-primary);
+}
+
+.art-search:focus {
+  border-color: var(--fl-focus-ring);
+  box-shadow: var(--fl-focus-control);
+}
+
+.art-result {
+  background: var(--fl-white-a025);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-secondary);
+}
+
+.art-result:hover,
+.art-result.active {
+  background: var(--fl-gradient-active);
+  border-color: var(--fl-accent-brand);
+  color: var(--fl-content-primary);
+}
+
+.art-thumb:hover {
+  border-color: var(--fl-accent-brand);
+  box-shadow: var(--fl-outline-card-hover);
+  filter: none;
+}
+
+.art-thumb.selected {
+  border-color: var(--fl-state-success);
+  box-shadow: var(--fl-glow-success-12);
+}
+
+.art-actions {
+  border-top-color: var(--fl-border-subtle);
+}
+
+.art-modal .btn:not(.danger):not(.ghost),
+.confirm-modal .btn:not(.danger):not(.ghost) {
+  background: var(--fl-gradient-brand);
+  border-color: transparent;
+  color: var(--fl-color-white);
+}
+
+.art-modal .btn.ghost,
+.confirm-modal .btn.ghost {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-white-a10);
+  color: var(--fl-content-primary);
+}
+
+.art-modal .btn.danger,
+.confirm-modal .btn.danger {
+  background: var(--fl-state-danger-soft);
+  border-color: var(--fl-state-danger);
+  color: var(--fl-state-danger);
+}
+
+.stress-monitor {
+  background: var(--fl-dark-8-5-13-a82);
+  border-color: var(--fl-border-control);
+  color: var(--fl-state-success);
+  box-shadow: var(--fl-shadow-default);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-item,
+  .art-result,
+  .art-thumb,
+  .dl-mini-bar i,
+  .dl-summary-bar i,
+  .download-bar i,
+  .dl-bar i {
+    transition: none;
+  }
+}

@@ -6,6 +6,17 @@ import { cachedImgUrl } from "../imgUrl"
 import LauncherTabs from "./LauncherTabs"
 import ArtModal from "./ArtModal"
 import { useClickOutside } from "../useClickOutside"
+import { matchTrainer } from "../store"
+
+function gogSlug(name: string): string {
+  return name
+    .replace(/[\u2122\u00ae\u00a9]/g, "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u0307\u0309-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+}
 
 function DotsIcon(): JSX.Element {
   return (
@@ -84,6 +95,7 @@ export default function RightPanel(): JSX.Element {
   const playGame = useStore((s) => s.playGame)
   const installGame = useStore((s) => s.installGame)
   const uninstallGame = useStore((s) => s.uninstallGame)
+  const moveGame = useStore((s) => s.moveGame)
   const askConfirm = useStore((s) => s.askConfirm)
   const applyGameArt = useStore((s) => s.applyGameArt)
   const running = useStore((s) => s.running)
@@ -94,6 +106,13 @@ export default function RightPanel(): JSX.Element {
   const hidden = useStore((s) => s.hidden)
   const toggleHidden = useStore((s) => s.toggleHidden)
   const removeGame = useStore((s) => s.removeGame)
+  const downloads = useStore((s) => s.downloads)
+  const wemodEnabled = useStore((s) => s.wemodEnabled)
+  const setWemodEnabled = useStore((s) => s.setWemodEnabled)
+  const trainerFiles = useStore((s) => s.trainerFiles)
+  const setTrainerFiles = useStore((s) => s.setTrainerFiles)
+  const flingTrainer = useStore((s) => s.flingTrainer)
+  const setFlingTrainer = useStore((s) => s.setFlingTrainer)
   const [defaultProton, setDefaultProton] = useState<string>("")
   useEffect(() => {
     void window.api.protonDefaultGet().then((p) => setDefaultProton(p ?? ""))
@@ -112,13 +131,40 @@ export default function RightPanel(): JSX.Element {
   const [showArt, setShowArt] = useState(false)
   const [gamemodeOn, setGamemodeOn] = useState(false)
   const [gamemodeAvailable, setGamemodeAvailable] = useState(true)
+  const [cpuPinOn, setCpuPinOn] = useState(false)
+  const [cpuPinAvailable, setCpuPinAvailable] = useState(true)
+  const [cpuPinList, setCpuPinListState] = useState("")
   const menuRef = useRef<HTMLDivElement | null>(null)
   useClickOutside(menuRef, () => setMenu(false), menu)
 
   useEffect(() => {
     void window.api.gamemodeGet().then(setGamemodeOn)
     void window.api.gamemodeDetect().then(setGamemodeAvailable)
+    void window.api.cpuPinGet().then(setCpuPinOn)
+    void window.api.cpuPinDetect().then(setCpuPinAvailable)
+    void window.api.cpuPinListGet().then(setCpuPinListState)
   }, [])
+  useEffect(() => {
+    // Carrega a pasta de trainers + `.exe` (compartilhado com a aba Trainers).
+    void window.api
+      .settingsKeyGet("trainersFolder")
+      .then((p) => (p ? window.api.scanTrainerExes(p) : []))
+      .then(setTrainerFiles)
+      .catch(() => undefined)
+  }, [setTrainerFiles])
+  useEffect(() => {
+    const off = window.api.onWemodPlay((p) => {
+      if (p.stage === "built") {
+        const phase = p.phase ?? "verify"
+        setStatus(
+          phase === "done" || phase === "skipped"
+            ? t("wemod.prepared")
+            : `${t("wemod.preparing")} ${Math.round(p.percent ?? 0)}%`
+        )
+      }
+    })
+    return () => off()
+  }, [setStatus, t])
   const toggleGamemode = (next: boolean): void => {
     if (next && !gamemodeAvailable) return
     void window.api.gamemodeSet(next).then(setGamemodeOn)
@@ -147,6 +193,13 @@ export default function RightPanel(): JSX.Element {
   const isSteam = g?.store === "steam"
   const isBackend = g?.store === "epic" || g?.store === "gog"
   const gAppid = g?.appid
+  // Download ativo do jogo GOG → botão principal mostra progresso.
+  const gogDl =
+    g?.store === "gog"
+      ? downloads.find(
+          (d) => d.store === "gog" && d.appId === String(g?.appid) && d.status === "running"
+        )
+      : undefined
 
   useEffect(() => {
     if (isSteam && gAppid) void fetchDetails(gAppid)
@@ -245,17 +298,6 @@ export default function RightPanel(): JSX.Element {
 
         <div className="quick-options">
           <span className="nav-label">{t("right.panel.performance")}</span>
-          <Switch
-            label={t("right.panel.gamemode")}
-            title={
-              gamemodeAvailable
-                ? t("right.panel.gamemode.hint")
-                : t("right.panel.gamemode.unavailable")
-            }
-            on={gamemodeOn}
-            onChange={toggleGamemode}
-            disabled={!gamemodeAvailable}
-          />
           <button className="quick-btn" onClick={() => openSite(l.web)}>{t("right.panel.menu.website")}</button>
           <button className="quick-btn" title={t("right.panel.placeholder", { label: t("right.panel.gameSettings") })}>
             {t("right.panel.gameSettings")}
@@ -280,7 +322,7 @@ export default function RightPanel(): JSX.Element {
     gg.store === "steam"
       ? `https://store.steampowered.com/app/${gg.appid}`
       : gg.store === "gog"
-        ? `https://www.gog.com/en/games?search=${encodeURIComponent(gg.name)}`
+        ? `https://www.gog.com/en/game/${gogSlug(gg.name)}`
         : `https://store.epicgames.com/p/${encodeURIComponent(gg.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"))}`
   const resolvedAppid = !isSteam && gg.id ? steamResolve[gg.id] : undefined
   const detail = isSteam && gg.appid ? details[gg.appid] : resolvedAppid ? details[resolvedAppid] : undefined
@@ -328,10 +370,15 @@ export default function RightPanel(): JSX.Element {
       <div className="play-row" ref={menuRef}>
         <button
           className="btn-play"
-          disabled={running}
+          disabled={running || !!gogDl}
           onClick={() => (gg.installed ? void playGame(gg) : void installGame(gg))}
+          title={gogDl ? `${t("downloads.title")}: ${Math.min(100, Math.max(0, gogDl.progress.percent ?? 0)).toFixed(0)}%` : undefined}
         >
-          {gg.installed ? t("common.play") : t("common.install")}
+          {gogDl
+            ? `${Math.min(100, Math.max(0, gogDl.progress.percent ?? 0)).toFixed(0)}%`
+            : gg.installed
+              ? t("common.play")
+              : t("common.install")}
         </button>
         <button
           className="btn-caret"
@@ -347,21 +394,34 @@ export default function RightPanel(): JSX.Element {
               {isSteam ? t("right.panel.steamPage") : t("right.panel.menu.website")}
             </button>
             {gg.installDir && <button onClick={() => void window.api.openPath(gg.installDir as string)}>{t("right.panel.menu.openGameFolder")}</button>}
-            <button onClick={() => placeholder(t("right.panel.menu.runWinetricks"))()}>{t("right.panel.menu.runWinetricks")}</button>
-            <button onClick={() => setShowArt(true)}>{t("right.panel.menu.editArt")}</button>
-            {gg.installed && (
+            {gg.store === "gog" && gg.installDir && (
               <button
-                className="danger"
                 onClick={() => {
                   setMenu(false)
-                  void askConfirm(t("right.panel.confirm.uninstall", { name: gg.name })).then((ok) => {
-                    if (ok) void uninstallGame(gg)
+                  void askConfirm(t("right.panel.confirm.move", { name: gg.name })).then((ok) => {
+                    if (ok) void moveGame(gg)
                   })
                 }}
               >
-                {t("right.panel.menu.uninstall")}
+                {t("right.panel.menu.moveGame")}
               </button>
             )}
+            <button onClick={() => placeholder(t("right.panel.menu.runWinetricks"))()}>{t("right.panel.menu.runWinetricks")}</button>
+            <button onClick={() => setShowArt(true)}>{t("right.panel.menu.editArt")}</button>
+            {isSteam || gg.store === "gog" || gg.store === "epic" ?
+              (gg.installed && (
+                <button
+                  className="danger"
+                  onClick={() => {
+                    setMenu(false)
+                    void askConfirm(t("right.panel.confirm.uninstall", { name: gg.name })).then((ok) => {
+                      if (ok) void uninstallGame(gg)
+                    })
+                  }}
+                >
+                  {t("right.panel.menu.uninstall")}
+                </button>
+              )) : null}
             <button
               onClick={() => {
                 toggleHidden(gg.id)
@@ -421,6 +481,20 @@ export default function RightPanel(): JSX.Element {
       </div>
       <div className="quick-options">
         <span className="nav-label">{t("right.panel.performance")}</span>
+        {matchTrainer(gg.name, trainerFiles) && (
+          <Switch
+            label={t("right.panel.flingTrainer")}
+            title={t("right.panel.flingTrainer.hint")}
+            on={flingTrainer.includes(gg.id)}
+            onChange={(next) => setFlingTrainer(gg.id, next)}
+          />
+        )}
+        <Switch
+          label={t("right.panel.wemod")}
+          title={t("right.panel.wemod.hint")}
+          on={gg.store === "steam" || gg.store === "epic" || gg.store === "gog" ? wemodEnabled.includes(gg.id) : false}
+          onChange={(next) => setWemodEnabled(gg.id, next)}
+        />
         <div className="quick-row">
           <span className="quick-row-label">{t("right.panel.proton.default")}</span>
           <select
@@ -437,17 +511,49 @@ export default function RightPanel(): JSX.Element {
             ))}
           </select>
         </div>
-        <Switch
-          label={t("right.panel.gamemode")}
-          title={
-            gamemodeAvailable
-              ? t("right.panel.gamemode.hint")
-              : t("right.panel.gamemode.unavailable")
-          }
-          on={gamemodeOn}
-          onChange={toggleGamemode}
-          disabled={!gamemodeAvailable}
-        />
+        {gg.store === "gog" && (
+          <>
+            <Switch
+              label={t("right.panel.gamemode")}
+              title={
+                gamemodeAvailable
+                  ? t("right.panel.gamemode.hint")
+                  : t("right.panel.gamemode.unavailable")
+              }
+              on={gamemodeOn}
+              onChange={toggleGamemode}
+              disabled={!gamemodeAvailable}
+            />
+            <Switch
+              label={t("right.panel.cpuPin")}
+              title={
+                cpuPinAvailable
+                  ? t("right.panel.cpuPin.hint")
+                  : t("right.panel.cpuPin.unavailable")
+              }
+              on={cpuPinOn}
+              onChange={(next) => {
+                void window.api.cpuPinSet(next).then(setCpuPinOn)
+              }}
+              disabled={!cpuPinAvailable}
+            />
+            {cpuPinOn && cpuPinAvailable && (
+              <div className="quick-row">
+                <span className="quick-row-label">{t("right.panel.cpuPin.listLabel")}</span>
+                <input
+                  className="quick-select"
+                  type="text"
+                  value={cpuPinList}
+                  placeholder={t("right.panel.cpuPin.listHint")}
+                  onChange={(e) => {
+                    setCpuPinListState(e.target.value)
+                    void window.api.cpuPinListSet(e.target.value).then((r) => setCpuPinListState(r))
+                  }}
+                />
+              </div>
+            )}
+          </>
+        )}
       </div>
       {showArt && (
         <ArtModal

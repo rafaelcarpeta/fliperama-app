@@ -1,6 +1,6 @@
 {
   "name": "fliperama",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Fliperama — hub Electron com launchers via Wine e jogos via UMU/Proton",
   "main": "./out/main/index.js",
   "private": true,
@@ -11,7 +11,14 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "dist": "electron-vite build && electron-builder --linux AppImage",
     "publish:server": "bash scripts/publish-server.sh",
-    "publish:site": "bash scripts/publish-site.sh"
+    "publish:site": "bash scripts/publish-site.sh",
+    "design:audit": "node scripts/audit-design-tokens.mjs",
+    "design:usage:audit": "node scripts/audit-design-usage.mjs",
+    "design:contrast": "node scripts/check-design-contrast.mjs",
+    "design:fonts:verify": "node scripts/verify-design-fonts.mjs",
+    "design:capture": "electron --no-sandbox scripts/capture-design-system.cjs",
+    "design:perf": "electron --no-sandbox scripts/measure-design-system.cjs",
+    "design:capture:landing": "electron --no-sandbox scripts/capture-landing-page.cjs"
   },
   "build": {
     "appId": "com.fliperama.fliperama",

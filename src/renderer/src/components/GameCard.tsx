@@ -19,6 +19,7 @@ function GameCard({ game }: { game: SteamGame }): JSX.Element {
   const selected = useStore((s) => s.selected)
   const playGame = useStore((s) => s.playGame)
   const running = useStore((s) => s.running)
+  const downloads = useStore((s) => s.downloads)
   const active = selected?.kind === "game" && selected.id === game.id
   const icon = storeIcon(game.store)
   const fav = useStore((s) => s.favorites.includes(game.id))
@@ -32,17 +33,25 @@ function GameCard({ game }: { game: SteamGame }): JSX.Element {
   useClickOutside(menuRef, () => setMenu(false), menu)
   const isHidden = hidden.includes(game.id)
 
+  // Download ativo do jogo GOG → overlay de progresso + play desabilitado.
+  const gogDl = game.store === "gog"
+    ? downloads.find((d) => d.store === "gog" && d.appId === String(game.appid) && d.status === "running")
+    : undefined
+  const dlPct = gogDl ? Math.min(100, Math.max(0, gogDl.progress.percent ?? 0)) : 0
+
   return (
     <div
       className={`card ${active ? "selected" : ""}`}
       onClick={() => select({ kind: "game", id: game.id })}
     >
       <div className="cover">
+        {/* A grade já limita quantos cards existem no DOM. Lazy loading aqui
+            criava um segundo adiamento durante rolagens rápidas. */}
         <img
           className="cover-art"
           src={cachedImgUrl(game.coverUrl)}
           alt={game.name}
-          loading="lazy"
+          loading="eager"
           decoding="async"
           onError={(e) => {
             e.currentTarget.style.display = "none"
@@ -54,7 +63,7 @@ function GameCard({ game }: { game: SteamGame }): JSX.Element {
             className="store-badge"
             src={icon}
             alt={game.store}
-            loading="lazy"
+            loading="eager"
             decoding="async"
             onError={(e) => {
               e.currentTarget.style.display = "none"
@@ -74,19 +83,27 @@ function GameCard({ game }: { game: SteamGame }): JSX.Element {
             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.27 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
           </svg>
         </button>
-        <button
-          className="play-btn"
-          title={game.installed ? t("game.card.play") : t("game.card.notInstalled")}
-          disabled={!game.installed || running}
-          onClick={(e) => {
-            e.stopPropagation()
-            if (game.installed) void playGame(game)
-          }}
-        >
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        </button>
+        {(game.store === "steam" || game.store === "gog" || game.store === "epic") && (
+          <button
+            className="play-btn"
+            title={game.installed ? t("game.card.play") : t("game.card.notInstalled")}
+            disabled={!game.installed || running || !!gogDl}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (game.installed) void playGame(game)
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+        )}
+        {gogDl && (
+          <div className="card-dl-overlay" title={`${t("downloads.title")}: ${dlPct.toFixed(0)}%`}>
+            <div className="card-dl-bar"><i style={{ width: `${dlPct}%` }} /></div>
+            <div className="card-dl-pct">{dlPct.toFixed(0)}%</div>
+          </div>
+        )}
       </div>
       <div className="card-dots" ref={menuRef}>
         <button

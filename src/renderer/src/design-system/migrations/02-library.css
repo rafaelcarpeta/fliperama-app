@@ -1,0 +1,326 @@
+/* Phase 2.2 — Library only.
+ * Scoped through .library-head, library grid classes and .right-panel.
+ * Behavior, virtualization and layout dimensions remain unchanged.
+ */
+
+.library-head {
+  background: var(--fl-dark-7-5-13-a96);
+  border-bottom-color: var(--fl-border-subtle);
+}
+
+.library-head .page-title h2 {
+  color: var(--fl-content-primary);
+  font-family: var(--fl-font-display);
+  font-weight: var(--fl-font-weight-display);
+  letter-spacing: var(--fl-tracking-display);
+}
+
+.library-head .count-badge {
+  background: var(--fl-pink-a08);
+  border-color: var(--fl-pink-a17);
+  color: var(--fl-accent-brand);
+}
+
+.library-head .ghost-btn {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-white-a10);
+  color: var(--fl-color-neutral-14);
+  box-shadow: none;
+}
+
+.library-head .ghost-btn:hover,
+.library-head .ghost-btn.active {
+  background: var(--fl-gradient-active);
+  border-color: var(--fl-pink-a17);
+  color: var(--fl-content-primary);
+  box-shadow: none;
+}
+
+.library-head .filter-menu,
+.library-head .dropdown {
+  background: var(--fl-dark-7-5-13-a96);
+  border-color: var(--fl-border-subtle);
+  box-shadow: var(--fl-shadow-default);
+}
+
+.library-head .filter-menu button {
+  color: var(--fl-content-secondary);
+}
+
+.library-head .filter-menu button:hover,
+.library-head .filter-menu button.active {
+  background: var(--fl-gradient-active);
+  color: var(--fl-content-primary);
+}
+
+.card {
+  background: var(--fl-gradient-panel);
+  border-color: var(--fl-border-subtle);
+}
+
+.card:hover {
+  border-color: var(--fl-pink-a24);
+  box-shadow: var(--fl-outline-card-hover);
+}
+
+.card.selected {
+  border-color: var(--fl-accent-brand);
+  box-shadow: var(--fl-outline-card-selected);
+}
+
+.cover-overlay {
+  background: var(--fl-gradient-cover-overlay);
+}
+
+.play-btn {
+  background: var(--fl-state-success);
+  color: var(--fl-color-bg);
+  box-shadow: var(--fl-glow-success-14);
+}
+
+.play-btn:hover:not(:disabled) {
+  box-shadow: var(--fl-glow-success-14);
+}
+
+.card-dl-overlay {
+  background: var(--fl-dark-10-6-16-a92);
+  backdrop-filter: none;
+}
+
+.card-dl-bar {
+  background: var(--fl-white-a15);
+}
+
+.card-dl-bar i {
+  background: var(--fl-gradient-progress);
+}
+
+.card-dl-pct {
+  color: var(--fl-color-white);
+}
+
+.store-badge,
+.fav-btn,
+.dots-btn {
+  background: var(--fl-dark-10-6-16-a65);
+  border-color: var(--fl-white-a10);
+  backdrop-filter: none;
+}
+
+.fav-btn,
+.dots-btn {
+  color: var(--fl-color-neutral-14);
+}
+
+.fav-btn:hover,
+.fav-btn.on {
+  background: var(--fl-yellow-a09);
+  border-color: var(--fl-accent-highlight);
+  color: var(--fl-accent-highlight);
+}
+
+.dots-btn:hover {
+  background: var(--fl-pink-a08);
+  border-color: var(--fl-accent-brand);
+  color: var(--fl-accent-brand);
+}
+
+.running-tag,
+.installed-tag {
+  background: var(--fl-success-a10);
+  border-color: var(--fl-success-a12);
+  color: var(--fl-state-success);
+  box-shadow: none;
+}
+
+.add-card {
+  background: var(--fl-white-a018);
+  border-color: var(--fl-white-a12);
+  color: var(--fl-content-secondary);
+}
+
+.add-card:hover {
+  background: var(--fl-gradient-active);
+  border-color: var(--fl-accent-brand);
+  color: var(--fl-content-primary);
+  box-shadow: none;
+}
+
+.add-card em,
+.add-hint {
+  color: var(--fl-color-neutral-09);
+}
+
+.library-head + .main .game-table {
+  overflow: hidden;
+  border: 1px solid var(--fl-border-subtle);
+  border-radius: var(--fl-radius-16);
+  background: var(--fl-white-a018);
+  color: var(--fl-content-primary);
+}
+
+.library-head + .main .game-table th {
+  background: var(--fl-white-a025);
+  color: var(--fl-color-neutral-11);
+}
+
+.library-head + .main .game-table th,
+.library-head + .main .game-table td {
+  border-bottom-color: var(--fl-border-subtle);
+}
+
+.library-head + .main .game-table tbody tr:hover {
+  background: var(--fl-white-a03);
+}
+
+.right-panel {
+  background: var(--fl-gradient-panel-deep);
+  border-left-color: var(--fl-border-subtle);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.right-panel.empty {
+  color: var(--fl-content-secondary);
+}
+
+.right-panel .empty-art {
+  background: var(--fl-gradient-panel-brand);
+  border-color: var(--fl-border-subtle);
+}
+
+.right-panel .banner {
+  border: 1px solid var(--fl-border-subtle);
+}
+
+.right-panel .banner-overlay {
+  background: var(--fl-gradient-banner-overlay);
+}
+
+.right-panel-head h2 {
+  color: var(--fl-content-primary);
+  font-family: var(--fl-font-display);
+  font-weight: var(--fl-font-weight-display);
+  letter-spacing: var(--fl-tracking-display);
+}
+
+.right-panel .tags {
+  color: var(--fl-accent-brand);
+}
+
+.right-panel .store-label,
+.right-panel .tags-divider,
+.right-panel .info-list span,
+.right-panel .review-total {
+  color: var(--fl-color-neutral-09);
+}
+
+.right-panel .genre-chip {
+  background: var(--fl-white-a06);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-primary);
+}
+
+.right-panel .genre-chip:hover {
+  border-color: var(--fl-accent-brand);
+  color: var(--fl-accent-brand);
+}
+
+.right-panel .btn-play {
+  background: var(--fl-gradient-brand);
+  color: var(--fl-color-white);
+  box-shadow: var(--fl-shadow-brand);
+}
+
+.right-panel .btn-play:hover:not(:disabled) {
+  box-shadow: var(--fl-shadow-brand-hover);
+}
+
+.right-panel .btn-caret,
+.right-panel .quick-btn {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-white-a10);
+  color: var(--fl-content-primary);
+  box-shadow: none;
+}
+
+.right-panel .btn-caret:hover,
+.right-panel .quick-btn:hover {
+  background: var(--fl-gradient-active);
+  border-color: var(--fl-pink-a17);
+  color: var(--fl-content-primary);
+  box-shadow: none;
+}
+
+.right-panel .dropdown {
+  background: var(--fl-dark-7-5-13-a96);
+  border-color: var(--fl-border-subtle);
+  box-shadow: var(--fl-shadow-default);
+}
+
+.right-panel .dropdown button {
+  color: var(--fl-content-secondary);
+}
+
+.right-panel .dropdown button:hover {
+  background: var(--fl-gradient-active);
+  color: var(--fl-content-primary);
+}
+
+.right-panel .dropdown .danger {
+  color: var(--fl-state-danger);
+}
+
+.right-panel .dropdown .danger:hover,
+.right-panel .quick-btn.danger:hover {
+  background: var(--fl-state-danger-soft);
+  border-color: var(--fl-state-danger);
+  color: var(--fl-state-danger);
+  box-shadow: none;
+}
+
+.right-panel .info-list > div,
+.right-panel .switch-row {
+  border-bottom-color: var(--fl-border-subtle);
+}
+
+.right-panel .quick-options {
+  border-top-color: var(--fl-border-subtle);
+}
+
+.right-panel .quick-row,
+.right-panel .quick-row-label {
+  color: var(--fl-content-primary);
+}
+
+.right-panel .quick-select {
+  background: var(--fl-dark-6-5-12-a44);
+  border-color: var(--fl-border-subtle);
+  color: var(--fl-content-primary);
+}
+
+.right-panel .quick-select:hover,
+.right-panel .quick-select:focus {
+  border-color: var(--fl-focus-ring);
+  box-shadow: var(--fl-focus-control);
+}
+
+.right-panel .quick-select option {
+  background: var(--fl-color-bg-alt);
+  color: var(--fl-content-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .play-btn,
+  .fav-btn,
+  .dots-btn,
+  .right-panel,
+  .right-panel .btn-play,
+  .right-panel .btn-caret,
+  .right-panel .quick-btn,
+  .right-panel .quick-select {
+    animation: none;
+    transition: none;
+  }
+}

@@ -1,8 +1,7 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useStore, type DownloadInfo } from "../store"
 import { useI18n } from "../i18n/useI18n"
 import { useClickOutside } from "../useClickOutside"
-import { useRef, useEffect } from "react"
 
 function Icon(): JSX.Element {
   return (
@@ -50,46 +49,22 @@ export default function DownloadTracker(): JSX.Element {
   const removeDownload = useStore((s) => s.removeDownload)
   const setDownloads = useStore((s) => s.setDownloads)
   const [open, setOpen] = useState(false)
-  const [guard, setGuard] = useState<{ key: string; name?: string } | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
   useClickOutside(wrapRef, () => setOpen(false), open)
 
   useEffect(() => {
     void window.api.downloadsList(true).then((list) => {
-      setDownloads(list as DownloadInfo[])
+      setDownloads(list)
     })
     const off = window.api.onDownloadsUpdate((info) => {
-      const d = info as DownloadInfo
-      useStore.getState().upsertDownload(d)
-      // Mostra a orientação do Steam Guard automaticamente para qualquer
-      // download Steam recém-iniciado (percent === 0 = antes do steamcmd
-      // efetivamente começar a baixar — i.e. está pedindo o Guard).
-      if (d.store === "steam" && d.status === "running" && (d.progress.percent ?? 0) === 0) {
-        setGuard({ key: d.key, name: d.name })
-        setOpen(true)
-      }
-      if (d.store === "steam" && d.status !== "running") {
+      useStore.getState().upsertDownload(info)
+      // Download GOG concluído/falhou → refresh para atualizar "instalado".
+      if (info.store === "gog" && info.status !== "running") {
         void useStore.getState().refresh()
       }
     })
     return () => off()
   }, [setDownloads])
-
-  useEffect(() => {
-    const off = window.api.onSteamCmdGuard((p) => {
-      setGuard(p)
-      setOpen(true)
-    })
-    return () => off()
-  }, [])
-
-  // Fecha a notificação de autorização quando o download daquele jogo inicia
-  // (progress > 0) ou sai da lista — o download-panel em si permanece aberto.
-  useEffect(() => {
-    if (!guard) return
-    const row = downloads.find((d) => d.key === guard.key)
-    if (!row || (row.progress.percent ?? 0) > 0) setGuard(null)
-  }, [downloads, guard])
 
   const active = downloads.filter((d) => d.status === "running")
   const finished = downloads.filter((d) => d.status !== "running")
@@ -120,9 +95,7 @@ export default function DownloadTracker(): JSX.Element {
         onClick={() => setOpen(!open)}
       >
         <Icon />
-        {total > 0 && (
-          <span className="badge-count">{total}</span>
-        )}
+        {total > 0 && <span className="badge-count">{total}</span>}
         {total > 0 && (
           <div className="dl-mini-bar">
             <i style={{ width: `${overall}%` }} />
@@ -139,38 +112,19 @@ export default function DownloadTracker(): JSX.Element {
               </button>
             )}
           </div>
-          {guard && (
-            <div className="download-guard">
-              <div className="download-guard-head">
-                <p className="muted">
-                  {t("downloads.guard.title")}
-                  {guard.name ? ` — ${guard.name}` : ""}
-                </p>
-                <button
-                  className="btn ghost download-guard-close"
-                  onClick={() => setGuard(null)}
-                  title={t("common.cancel")}
-                  aria-label={t("common.cancel")}
-                >
-                  ✕
-                </button>
-              </div>
-              <p className="muted download-guard-hint">{t("downloads.guard.hint")}</p>
-            </div>
-          )}
           {total > 0 && (
             <div className="download-summary">
               <div className="download-summary-line">
                 <span>{t("downloads.active", { n: total })}</span>
                 <span>{overall}%</span>
-                <span className="dl-summary-speed">{t("downloads.totalSpeed")}: {fmtSpeed(speed)}</span>
+                <span className="dl-summary-speed">
+                  {t("downloads.totalSpeed")}: {fmtSpeed(speed)}
+                </span>
               </div>
               <div className="dl-summary-bar"><i style={{ width: `${overall}%` }} /></div>
             </div>
           )}
-          {all.length === 0 && (
-            <p className="muted download-empty">{t("downloads.empty")}</p>
-          )}
+          {all.length === 0 && <p className="muted download-empty">{t("downloads.empty")}</p>}
           {all.map((d) => (
             <DownloadRow
               key={d.key}
@@ -214,7 +168,9 @@ function DownloadRow({
         <span>{pct(info).toFixed(1)}%</span>
         {phase && <span className="download-phase">{t(`downloads.phase.${phase}`)}</span>}
         {info.progress.downloaded !== undefined && info.progress.total !== undefined && (
-          <span>{fmtMiB(info.progress.downloaded)} / {fmtMiB(info.progress.total)}</span>
+          <span>
+            {fmtMiB(info.progress.downloaded)} / {fmtMiB(info.progress.total)}
+          </span>
         )}
         <span>{fmtSpeed(info.progress.speed)}</span>
         <span>ETA {info.progress.eta ?? "—"}</span>

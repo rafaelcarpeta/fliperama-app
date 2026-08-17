@@ -38,17 +38,9 @@ const ART: Record<string, LauncherArt> = {
     iconUrl: eaLogo,
     gradient: "linear-gradient(160deg,#ff4747,#7a1212)",
   },
-  amazon: {
-    iconUrl: WM("Amazon_logo.svg"),
-    gradient: "linear-gradient(160deg,#ff9900,#131a22)",
-  },
   rockstar: {
     iconUrl: WM("Rockstar_Games_logo.svg"),
     gradient: "linear-gradient(160deg,#fca311,#14213d)",
-  },
-  wargaming: {
-    iconUrl: WM("Wargaming_logo.svg"),
-    gradient: "linear-gradient(160deg,#f5a623,#1d1d1d)",
   },
 }
 

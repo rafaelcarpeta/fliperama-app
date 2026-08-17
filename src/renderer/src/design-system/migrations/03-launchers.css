@@ -1,0 +1,93 @@
+/* Phase 2.3 — Launchers. */
+
+.main:has(.launcher-grid) .page-title h2 {
+  color: var(--fl-content-primary);
+  font-family: var(--fl-font-display);
+  font-weight: var(--fl-font-weight-display);
+  letter-spacing: var(--fl-tracking-display);
+}
+
+.main:has(.launcher-grid) .count-badge {
+  background: var(--fl-pink-a08);
+  border-color: var(--fl-pink-a17);
+  color: var(--fl-accent-brand);
+}
+
+.launcher-card {
+  background: var(--fl-gradient-panel);
+  border-color: var(--fl-border-subtle);
+}
+
+.launcher-card:hover {
+  border-color: var(--fl-pink-a24);
+  box-shadow: var(--fl-outline-card-hover);
+}
+
+.launcher-card.selected {
+  border-color: var(--fl-accent-brand);
+  box-shadow: var(--fl-outline-card-selected);
+}
+
+.launcher-banner-overlay {
+  background: var(--fl-gradient-launcher-overlay);
+}
+
+.launcher-store-badge,
+.launcher-status-chip {
+  background: var(--fl-dark-10-6-16-a65);
+  color: var(--fl-content-secondary);
+}
+
+.launcher-status-chip.ok {
+  background: var(--fl-success-a08);
+  color: var(--fl-state-success);
+}
+
+.launcher-card-body h3 {
+  color: var(--fl-content-primary);
+}
+
+.launcher-store {
+  color: var(--fl-color-neutral-09);
+}
+
+.launcher-card-actions .btn:not(.danger):not(.ghost) {
+  background: var(--fl-gradient-brand);
+  border-color: transparent;
+  color: var(--fl-color-white);
+}
+
+.launcher-card-actions .btn.ghost {
+  background: var(--fl-white-a03);
+  border-color: var(--fl-white-a10);
+  color: var(--fl-content-primary);
+}
+
+.launcher-card-actions .btn.ghost:hover:not(:disabled) {
+  background: var(--fl-gradient-active);
+  border-color: var(--fl-pink-a17);
+}
+
+.launcher-card-actions .btn.danger {
+  background: var(--fl-state-danger-soft);
+  border-color: var(--fl-state-danger);
+  color: var(--fl-state-danger);
+}
+
+.btn-play-sm {
+  background: var(--fl-state-success);
+  color: var(--fl-color-bg);
+  box-shadow: none;
+}
+
+.btn-play-sm:hover:not(:disabled) {
+  box-shadow: var(--fl-glow-success-14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launcher-card,
+  .launcher-card .btn,
+  .btn-play-sm {
+    transition: none;
+  }
+}

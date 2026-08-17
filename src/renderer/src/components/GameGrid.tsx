@@ -3,9 +3,30 @@ import GameCard from "./GameCard"
 import { useStore, filterLibrary, type SteamGame } from "../store"
 import { useI18n } from "../i18n/useI18n"
 import { useVirtualGrid } from "../useVirtualGrid"
+import { cachedImgUrl } from "../imgUrl"
 
 // Item sentinela do botão "Adicionar jogo" no fim do grid virtualizado.
 const ADD_CARD = Symbol("add-card")
+const COVER_PRELOAD_ROWS = 8
+const preloadedCovers = new Set<string>()
+const activeCoverPreloads = new Set<HTMLImageElement>()
+
+function preloadCover(url: string): void {
+  const src = cachedImgUrl(url)
+  if (!src || preloadedCovers.has(src)) return
+  preloadedCovers.add(src)
+  const image = new Image()
+  activeCoverPreloads.add(image)
+  image.onload = (): void => {
+    activeCoverPreloads.delete(image)
+  }
+  image.onerror = (): void => {
+    activeCoverPreloads.delete(image)
+    preloadedCovers.delete(src)
+  }
+  image.decoding = "async"
+  image.src = src
+}
 
 function PlusIcon(): JSX.Element {
   return (
@@ -53,6 +74,17 @@ export default function GameGrid(): JSX.Element {
 
   const { gridRef, lineRef, startIndex, endIndex, padTop, padBottom, cols } =
     useVirtualGrid(displayItems.length)
+
+  // Preaquece capas além do overscan sem montar cards adicionais. Em rolagem
+  // descendente rápida, o protocolo de cache e a decodificação ficam algumas
+  // linhas à frente da viewport; as linhas anteriores já passaram pelo cache.
+  useEffect(() => {
+    const preloadEnd = Math.min(sorted.length, endIndex + cols * COVER_PRELOAD_ROWS)
+    for (let i = startIndex; i < preloadEnd; i += 1) {
+      const game = sorted[i]
+      if (game?.coverUrl) preloadCover(game.coverUrl)
+    }
+  }, [cols, endIndex, sorted, startIndex])
 
   const rows: JSX.Element[] = []
   if (viewMode === "grid") {

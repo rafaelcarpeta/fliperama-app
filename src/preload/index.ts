@@ -66,6 +66,23 @@ export interface PrefixInfo {
   created: string
 }
 
+export type PrefixSource = "fliperama" | "custom" | "steam"
+
+export interface PrefixEntry {
+  id: string
+  name: string
+  path: string
+  source: PrefixSource
+  focused: boolean
+}
+
+export interface TrainerExe {
+  path: string
+  name: string
+  rel: string
+  size: number
+}
+
 export interface SystemStats {
   arch: string
   cpuModel: string
@@ -106,15 +123,6 @@ export interface SteamStatus {
   steamid: string | null
   libraryTotal: number
   indexed: number
-}
-
-export interface SteamCmdStatus {
-  installed: boolean
-  managed: boolean
-  path: string | null
-  hasLogin: boolean
-  steamRoot: string | null
-  installDir: string | null
 }
 
 export interface PricePoint {
@@ -226,6 +234,28 @@ export interface BackendGame {
   productId?: number
 }
 
+export interface DownloadProgress {
+  percent: number
+  phase?: "download" | "verify" | "install" | "done"
+  downloaded?: number // MiB
+  total?: number // MiB
+  speed?: number // MiB/s
+  eta?: string // HH:MM:SS
+}
+
+export interface DownloadInfo {
+  key: string
+  store: "epic" | "gog" | "steam"
+  appId: string
+  name: string
+  pid?: number
+  startedAt: number
+  lastUpdate: number
+  status: "running" | "completed" | "failed" | "cancelled"
+  error?: string
+  progress: DownloadProgress
+}
+
 const api = {
   listLaunchers: (): Promise<LauncherStatus[]> => ipcRenderer.invoke("launchers:list"),
   installLauncher: (id: string): Promise<{ pid: number | undefined }> =>
@@ -274,6 +304,8 @@ const api = {
     }
   },
   listPrefixes: (): Promise<PrefixInfo[]> => ipcRenderer.invoke("prefixes:list"),
+  getActivePrefix: (): Promise<string> => ipcRenderer.invoke("prefixes:active"),
+  detectPrefixes: (): Promise<PrefixEntry[]> => ipcRenderer.invoke("prefixes:detect"),
   getPrefixesDir: (): Promise<string> => ipcRenderer.invoke("prefixes:getDir"),
   pickPrefixesDir: (): Promise<string> => ipcRenderer.invoke("prefixes:pickDir"),
   resetPrefixesDir: (): Promise<string> => ipcRenderer.invoke("prefixes:resetDir"),
@@ -285,6 +317,119 @@ const api = {
     opts: { proton?: string; dedicated?: boolean }
   ): Promise<string> => ipcRenderer.invoke("prefixes:create", name, opts),
   removePrefix: (name: string): Promise<void> => ipcRenderer.invoke("prefixes:remove", name),
+  backupPrefix: (path: string): Promise<string> =>
+    ipcRenderer.invoke("prefixes:backup", path),
+  restorePrefix: (zipName: string): Promise<void> =>
+    ipcRenderer.invoke("prefixes:restore", zipName),
+  backupList: (): Promise<string[]> =>
+    ipcRenderer.invoke("prefixes:backupList"),
+  removeCustomPrefix: (path: string): Promise<void> =>
+    ipcRenderer.invoke("prefixes:removeCustom", path),
+  addCustomPath: (): Promise<string[]> =>
+    ipcRenderer.invoke("prefixes:addCustomPath"),
+  hidePrefix: (path: string): Promise<void> =>
+    ipcRenderer.invoke("prefixes:hide", path),
+  unhidePrefix: (path: string): Promise<void> =>
+    ipcRenderer.invoke("prefixes:unhide", path),
+  scanTrainerExes: (folder: string): Promise<TrainerExe[]> =>
+    ipcRenderer.invoke("trainers:scan", folder),
+  runTrainer: (
+    prefix: string,
+    exe: string,
+    args: string[]
+  ): Promise<{ pid: number | undefined }> => ipcRenderer.invoke("trainers:run", prefix, exe, args),
+  runCheatEngine: (cePath: string, prefix: string): Promise<{ pid: number | undefined }> =>
+    ipcRenderer.invoke("cheatEngine:run", cePath, prefix),
+  pickTrainersFolder: (): Promise<string> => ipcRenderer.invoke("trainers:pickFolder"),
+  pickCheatEngineExe: (): Promise<string> => ipcRenderer.invoke("cheatEngine:pickExe"),
+  resolveTrainerPrefix: (
+    game: {
+      store: "epic" | "gog" | "steam"
+      prefix?: string
+      appid?: number
+    }
+  ): Promise<string> => ipcRenderer.invoke("trainers:resolvePrefix", game),
+  wemodDownload: (): Promise<string> => ipcRenderer.invoke("wemod:download"),
+  wemodInstall: (prefix: string): Promise<void> => ipcRenderer.invoke("wemod:install", prefix),
+  wemodLaunch: (prefix: string): Promise<{ pid: number | undefined }> =>
+    ipcRenderer.invoke("wemod:launch", prefix),
+  wemodStop: (prefix: string): Promise<boolean> => ipcRenderer.invoke("wemod:stop", prefix),
+  wemodStatus: (prefix: string): Promise<"nao instalado" | "instalado" | "rodando"> =>
+    ipcRenderer.invoke("wemod:status", prefix),
+  wemodLoginSync: (prefix: string): Promise<void> =>
+    ipcRenderer.invoke("wemod:login:sync", prefix),
+  wemodBuiltInstall: (prefix: string): Promise<void> =>
+    ipcRenderer.invoke("wemod:built:install", prefix),
+  wemodBuiltStatus: (): Promise<{ hasRelease: boolean; installed: boolean }> =>
+    ipcRenderer.invoke("wemod:built:status"),
+  wemodPlay: (
+    game: {
+      id: string
+      store: "epic" | "gog" | "steam"
+      name: string
+      installed?: boolean
+      coverUrl?: string
+      installDir?: string
+      exe?: string
+      prefix?: string
+      productId?: number
+      appName?: string
+    }
+  ): Promise<string> => ipcRenderer.invoke("wemod:play", game),
+  onWemodPlay: (
+    cb: (p: {
+      gameId: string
+      stage: "built" | "launch"
+      phase?: "verify" | "release" | "download" | "extract" | "merge" | "done" | "skipped"
+      percent?: number
+      release?: string
+      launched?: boolean
+    }) => void
+  ): (() => void) => {
+    const handler = (_e: IpcRendererEvent, p: {
+      gameId: string
+      stage: "built" | "launch"
+      phase?: "verify" | "release" | "download" | "extract" | "merge" | "done" | "skipped"
+      percent?: number
+      release?: string
+      launched?: boolean
+    }): void => cb(p)
+    ipcRenderer.on("wemod:play", handler)
+    return () => ipcRenderer.removeListener("wemod:play", handler)
+  },
+  onWemodBuiltProgress: (
+    cb: (p: {
+      phase: "verify" | "release" | "download" | "extract" | "merge" | "done" | "skipped"
+      percent: number
+      release?: string
+    }) => void
+  ): (() => void) => {
+    const handler = (
+      _e: IpcRendererEvent,
+      p: {
+        phase: "verify" | "release" | "download" | "extract" | "merge" | "done" | "skipped"
+        percent: number
+        release?: string
+      }
+    ): void => cb(p)
+    ipcRenderer.on("wemod:built:progress", handler)
+    return () => ipcRenderer.removeListener("wemod:built:progress", handler)
+  },
+  onWemodDownloadProgress: (
+    cb: (p: {
+      phase: "version" | "download" | "extract" | "done"
+      percent: number
+      version?: string
+    }) => void
+  ): (() => void) => {
+    const handler = (_e: IpcRendererEvent, p: {
+      phase: "version" | "download" | "extract" | "done"
+      percent: number
+      version?: string
+    }): void => cb(p)
+    ipcRenderer.on("wemod:downloadProgress", handler)
+    return () => ipcRenderer.removeListener("wemod:downloadProgress", handler)
+  },
   launcherConfigGet: (id: string): Promise<LauncherConfig> =>
     ipcRenderer.invoke("launchers:config:get", id),
   launcherConfigSet: (
@@ -300,6 +445,56 @@ const api = {
   steamPlay: (appid: number): Promise<{ pid: number | undefined }> =>
     ipcRenderer.invoke("steam:play", appid),
   steamUninstall: (appid: number): Promise<void> => ipcRenderer.invoke("steam:uninstall", appid),
+  launcherInstallGame: (opts: { store: "epic"; appName?: string }): Promise<{
+    pid: number | undefined
+  }> => ipcRenderer.invoke("launchers:installGame", opts),
+  launcherPlayGame: (opts: { store: "epic"; appName?: string }): Promise<{
+    pid: number | undefined
+  }> => ipcRenderer.invoke("launchers:playGame", opts),
+  launcherUninstallGame: (opts: { store: "epic"; appName?: string }): Promise<{
+    pid: number | undefined
+  }> => ipcRenderer.invoke("launchers:uninstallGame", opts),
+  libraryInstallGog: (productId: number, appTitle: string): Promise<{ pid: number | undefined; key: string }> =>
+    ipcRenderer.invoke("library:installGog", productId, appTitle),
+  libraryPlayGog: (game: BackendGame): Promise<{ pid: number | undefined }> =>
+    ipcRenderer.invoke("library:playGog", game),
+  libraryUninstallGog: (productId: number, installDir?: string): Promise<void> =>
+    ipcRenderer.invoke("library:uninstallGog", productId, installDir),
+  libraryMoveGog: (productId: number, installDir: string): Promise<{ newDir: string } | null> =>
+    ipcRenderer.invoke("library:moveGog", productId, installDir),
+  downloadsList: (includeFinished: boolean): Promise<DownloadInfo[]> =>
+    ipcRenderer.invoke("downloads:list", includeFinished),
+  downloadsCancel: (key: string): Promise<boolean> => ipcRenderer.invoke("downloads:cancel", key),
+  downloadsClearFinished: (): Promise<void> => ipcRenderer.invoke("downloads:clearFinished"),
+  downloadsRemove: (key: string): Promise<void> => ipcRenderer.invoke("downloads:remove", key),
+  onDownloadsUpdate: (cb: (info: DownloadInfo) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, info: DownloadInfo): void => cb(info)
+    ipcRenderer.on("downloads:update", handler)
+    return () => {
+      ipcRenderer.removeListener("downloads:update", handler)
+    }
+  },
+  onLibraryInstallProgress: (
+    cb: (p: { store: "gog"; percent: number }) => void
+  ): (() => void) => {
+    const handler = (_e: IpcRendererEvent, p: { store: "gog"; percent: number }): void => cb(p)
+    ipcRenderer.on("library:installProgress", handler)
+    return () => {
+      ipcRenderer.removeListener("library:installProgress", handler)
+    }
+  },
+  onLibraryInstallDone: (
+    cb: (d: { store: "gog"; ok: boolean; error?: string }) => void
+  ): (() => void) => {
+    const handler = (
+      _e: IpcRendererEvent,
+      d: { store: "gog"; ok: boolean; error?: string }
+    ): void => cb(d)
+    ipcRenderer.on("library:installDone", handler)
+    return () => {
+      ipcRenderer.removeListener("library:installDone", handler)
+    }
+  },
   storeSpecials: (): Promise<StoreItem[]> => ipcRenderer.invoke("store:specials"),
   storeBundles: (): Promise<Bundle[]> => ipcRenderer.invoke("store:bundles"),
   pricesHistory: (appids: number[]): Promise<GamePrice[]> => ipcRenderer.invoke("prices:history", appids),
@@ -309,13 +504,6 @@ const api = {
   settingsKeyGet: (name: string): Promise<string> => ipcRenderer.invoke("settings:key:get", name),
   settingsKeySet: (name: string, value: string): Promise<string> =>
     ipcRenderer.invoke("settings:key:set", name, value),
-  accentGet: (): Promise<string> => ipcRenderer.invoke("settings:accent:get"),
-  accentSet: (hex: string): Promise<string> => ipcRenderer.invoke("settings:accent:set", hex),
-  onAccentChange: (cb: (hex: string) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, hex: string): void => cb(hex)
-    ipcRenderer.on("settings:accent", handler)
-    return () => ipcRenderer.removeListener("settings:accent", handler)
-  },
   autostartGet: (): Promise<boolean> => ipcRenderer.invoke("autostart:get"),
   autostartSet: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke("autostart:set", enabled),
   trayGet: (): Promise<boolean> => ipcRenderer.invoke("tray:get"),
@@ -326,6 +514,11 @@ const api = {
   gamemodeDetect: (): Promise<boolean> => ipcRenderer.invoke("gamemode:detect"),
   gamemodeGet: (): Promise<boolean> => ipcRenderer.invoke("gamemode:get"),
   gamemodeSet: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke("gamemode:set", enabled),
+  cpuPinDetect: (): Promise<boolean> => ipcRenderer.invoke("cpuPin:detect"),
+  cpuPinGet: (): Promise<boolean> => ipcRenderer.invoke("cpuPin:get"),
+  cpuPinSet: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke("cpuPin:set", enabled),
+  cpuPinListGet: (): Promise<string> => ipcRenderer.invoke("cpuPin:list:get"),
+  cpuPinListSet: (list: string): Promise<string> => ipcRenderer.invoke("cpuPin:list:set", list),
   artFetch: (): Promise<void> => ipcRenderer.invoke("art:fetch"),
   artPick: (appid: number, kind: "cover" | "banner"): Promise<string | null> =>
     ipcRenderer.invoke("art:pick", appid, kind),
@@ -410,6 +603,13 @@ const api = {
       ipcRenderer.removeListener("umu:exited", handler)
     }
   },
+  onLauncherExited: (cb: (p: { store: string; id: string }) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, p: { store: string; id: string }): void => cb(p)
+    ipcRenderer.on("launcher:exited", handler)
+    return () => {
+      ipcRenderer.removeListener("launcher:exited", handler)
+    }
+  },
   stressInfo: (): Promise<{ enabled: boolean; appIds: number[] }> =>
     ipcRenderer.invoke("stress:info"),
   onStressDrift: (cb: (p: { drift: number; max: number }) => void): (() => void) => {
@@ -446,6 +646,8 @@ const api = {
   },
   authLoginUrl: (store: "epic" | "gog"): Promise<AuthStartInfo> =>
     ipcRenderer.invoke("auth:loginUrl", store),
+  authLogin: (store: "epic" | "gog"): Promise<AuthStatusInfo> =>
+    ipcRenderer.invoke("auth:login", store),
   authComplete: (store: "epic" | "gog", code: string): Promise<void> =>
     ipcRenderer.invoke("auth:complete", store, code),
   authStatus: (store: "epic" | "gog"): Promise<AuthStatusInfo> =>
@@ -466,71 +668,8 @@ const api = {
     ipcRenderer.invoke("library:resolveSteamAppid", name),
   libraryWikidataInfo: (name: string): Promise<unknown> =>
     ipcRenderer.invoke("library:wikidataInfo", name),
-  libraryInstallEpic: (appName: string, appTitle: string): Promise<{ pid: number | undefined; key: string }> =>
-    ipcRenderer.invoke("library:installEpic", appName, appTitle),
-  libraryInstallGog: (productId: number, appTitle: string): Promise<{ pid: number | undefined; key: string }> =>
-    ipcRenderer.invoke("library:installGog", productId, appTitle),
-  libraryPlayEpic: (game: BackendGame): Promise<{ pid: number | undefined }> =>
-    ipcRenderer.invoke("library:playEpic", game),
-  libraryPlayGog: (game: BackendGame): Promise<{ pid: number | undefined }> =>
-    ipcRenderer.invoke("library:playGog", game),
-  libraryUninstallEpic: (appName: string): Promise<void> =>
-    ipcRenderer.invoke("library:uninstallEpic", appName),
-  libraryUninstallGog: (productId: number, installDir?: string): Promise<void> =>
-    ipcRenderer.invoke("library:uninstallGog", productId, installDir),
-  downloadsList: (includeFinished: boolean): Promise<unknown[]> =>
-    ipcRenderer.invoke("downloads:list", includeFinished),
-  downloadsCancel: (key: string): Promise<boolean> => ipcRenderer.invoke("downloads:cancel", key),
-  downloadsClearFinished: (): Promise<void> => ipcRenderer.invoke("downloads:clearFinished"),
-  downloadsRemove: (key: string): Promise<void> => ipcRenderer.invoke("downloads:remove", key),
-  steamApiKeyTest: (key: string): Promise<boolean> =>
-    ipcRenderer.invoke("steam:apikey:test", key),
-  steamCmdStatus: (): Promise<SteamCmdStatus> => ipcRenderer.invoke("steamcmd:status"),
-  steamCmdInstall: (): Promise<string> => ipcRenderer.invoke("steamcmd:install"),
-  steamCmdRemove: (): Promise<void> => ipcRenderer.invoke("steamcmd:remove"),
-  steamCmdInstallGame: (appid: number, appTitle: string): Promise<{ pid: number | undefined; key: string }> =>
-    ipcRenderer.invoke("steamcmd:installGame", appid, appTitle),
-  steamCmdSubmitGuardCode: (key: string, code: string): Promise<boolean> =>
-    ipcRenderer.invoke("steamcmd:guardCode", key, code),
-  onSteamCmdGuard: (
-    cb: (p: { key: string; name?: string }) => void
-  ): (() => void) => {
-    const handler = (_e: IpcRendererEvent, p: { key: string; name?: string }): void => cb(p)
-    ipcRenderer.on("steamcmd:guardCodeRequested", handler)
-    return () => ipcRenderer.removeListener("steamcmd:guardCodeRequested", handler)
-  },
-  onSteamCmdProgress: (cb: (p: { percent: number }) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, p: { percent: number }): void => cb(p)
-    ipcRenderer.on("steamcmd:progress", handler)
-    return () => ipcRenderer.removeListener("steamcmd:progress", handler)
-  },
-  onDownloadsUpdate: (cb: (info: unknown) => void): (() => void) => {
-    const handler = (_e: IpcRendererEvent, info: unknown): void => cb(info)
-    ipcRenderer.on("downloads:update", handler)
-    return () => ipcRenderer.removeListener("downloads:update", handler)
-  },
-  onLibraryInstallProgress: (
-    cb: (p: { store: "epic" | "gog"; percent: number }) => void
-  ): (() => void) => {
-    const handler = (_e: IpcRendererEvent, p: { store: "epic" | "gog"; percent: number }): void =>
-      cb(p)
-    ipcRenderer.on("library:installProgress", handler)
-    return () => {
-      ipcRenderer.removeListener("library:installProgress", handler)
-    }
-  },
-  onLibraryInstallDone: (
-    cb: (d: { store: "epic" | "gog"; ok: boolean; error?: string }) => void
-  ): (() => void) => {
-    const handler = (
-      _e: IpcRendererEvent,
-      d: { store: "epic" | "gog"; ok: boolean; error?: string }
-    ): void => cb(d)
-    ipcRenderer.on("library:installDone", handler)
-    return () => {
-      ipcRenderer.removeListener("library:installDone", handler)
-    }
-  },
+  bootProgress: (pct: number): Promise<void> => ipcRenderer.invoke("boot:progress", pct),
+  bootDone: (): Promise<void> => ipcRenderer.invoke("boot:done"),
 }
 
 export type Api = typeof api

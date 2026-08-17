@@ -39,16 +39,15 @@ export function listProtons(): ProtonInfo[] {
 
 // Proton padrão para jogos/launchers sem `proton` explícito (configurável em
 // Configurações → Ações rápidas; global como `gamemoderun`).
+// Decisão FASE 11 (2026-08-13): **UMU-Proton é o padrão global fixo** — é o
+// único com `compatibilitytool.vdf` no formato `compat_tools` aceito pelo
+// umu-run 1.4.3 (`umu_runtime.py:561`). Protons antigos (cachyos/GE com
+// `installs`) quebram com `KeyError: 'compat_tools'`. Proton por launcher
+// continua configurável via `launchers:config:set`.
 export function defaultProton(): string | undefined {
-  const configured = settings.getKey("defaultProton")
-  if (configured) {
-    const found = listProtons().find((p) => !p.automatic && p.path === configured)
-    if (found) return configured
-  }
   const protons = listProtons().filter((p) => !p.automatic && p.path)
-  // Proton Experimental é o padrão (compatibilidade ampla)
-  const experimental = protons.find((p) => /experimental/i.test(p.name))
-  return (experimental ?? protons[0])?.path ?? undefined
+  const umu = protons.find((p) => /umu[\s-]?proton/i.test(p.name))
+  return umu?.path ?? protons[0]?.path ?? undefined
 }
 
 export function setDefaultProton(path: string | undefined): void {

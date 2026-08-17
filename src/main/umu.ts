@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process"
 import * as processes from "./processes"
 import { wrapCommand } from "./gamemode"
+import { wrapCpuPin } from "./cpuPin"
 import { defaultProton as resolveDefaultProton } from "./proton"
 
 export interface RunOptions {
@@ -12,7 +13,16 @@ export interface RunOptions {
   store?: string
   debug?: boolean
   envVars?: string[]
-  onExit?: (code: number | null) => void
+  // Quando true, aplica gamemoderun ao comando (apenas para jogos GOG).
+  wrapGamemode?: boolean
+  // Quando true, aplica taskset -c <lista> ao comando (apenas para jogos GOG).
+  wrapCpuPin?: boolean
+  // Key do processo no processes.start (rótulo do map children/running.json).
+  // Quando o comando roda no mesmo prefixo de um processo ativo (ex.: launcher
+  // aberto), usar processKey distinto evita o conflito "já há processo em
+  // execução" mantendo GAMEID próprio do jogo/launcher.
+  processKey?: string
+  onExit?: (key: string, code: number | null) => void
   preLaunch?: string
   postLaunch?: string
 }
@@ -35,13 +45,26 @@ export function buildEnv(opts: RunOptions): NodeJS.ProcessEnv {
 }
 
 export function run(opts: RunOptions): processes.StartResult {
-  const { bin, args } = wrapCommand(BINARY, [opts.exe, ...(opts.args ?? [])])
+  let bin = BINARY
+  let args = [opts.exe, ...(opts.args ?? [])]
+  // Encadeamento de wrappers (ordem externa → interna):
+  // taskset -c <lista> gamemoderun umu-run <exe> … — pinning por fora, gamemode por dentro.
+  if (opts.wrapCpuPin) {
+    const pinned = wrapCpuPin(bin, args)
+    bin = pinned.bin
+    args = pinned.args
+  }
+  if (opts.wrapGamemode) {
+    const wrapped = wrapCommand(bin, args)
+    bin = wrapped.bin
+    args = wrapped.args
+  }
   return processes.start(
     bin,
     args,
     buildEnv(opts),
     undefined,
-    opts.gameId ?? "umu",
+    opts.processKey ?? opts.gameId ?? "umu",
     {
       mode: "umu",
       prefix: opts.prefix,
