@@ -29,9 +29,9 @@ cabeado via `steamcmd` para a Steam.
 - **Loja:** promoções (Steam) + bundles (Humble / Fanatical) com hero banner
   carrossel e logos oficiais.
 - **Updates via servidor próprio:** provider `generic` + `electron-updater`
-  apontando para `https://fliperamabr.duckdns.org/files/fliperama/`
+  apontando para `https://files.fliperama.top/fliperama/`
   (Caddy + Python).
-- **Tray + minimizar para bandeja**, autostart, accent configurável.
+- **Tray + minimizar para bandeja** e autostart.
 - **Cache de imagens local** (`fliperaimg://`), thumbnails Steam, capa Epic/GOG
   com fallback Wikidata.
 - **Sistema de arquivos:** prefixos Wine em `~/Fliperama/umu`, jogos em
@@ -60,7 +60,7 @@ Configuração em `package.json`:
 
 ```jsonc
 "build": {
-  "publish": [{ "provider": "generic", "url": "https://fliperamabr.duckdns.org/files/fliperama/" }],
+  "publish": [{ "provider": "generic", "url": "https://files.fliperama.top/fliperama/" }],
   "artifactName": "Fliperama-${version}.${ext}"
 }
 ```
@@ -69,7 +69,7 @@ Configuração em `package.json`:
 
 - Pasta: `~/arquivos/fliperama/`.
 - HTTP: `serve_arquivos.py` em `:3002` (dual-stack, listagem 403).
-- TLS: Caddy (`:443`) → Let's Encrypt → `https://fliperamabr.duckdns.org/files/`.
+- TLS: Caddy (`:443`) → Let's Encrypt → `https://files.fliperama.top/`.
 - Suporte a `Range` (download diferencial/resumível do `electron-updater`).
 
 ## Stack e arquitetura

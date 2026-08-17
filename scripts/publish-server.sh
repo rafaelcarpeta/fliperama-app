@@ -7,7 +7,7 @@ set -euo pipefail
 SERVER="server@192.168.3.21"
 PORT="2220"
 DEST="~/arquivos/fliperama"
-URL_BASE="https://fliperama.top/files/fliperama"
+URL_BASE="https://files.fliperama.top/fliperama"
 PASS="753141" # senha SSH/sudo documentada (AGENTS.md)
 
 VERSION="$(node -e "console.log(require('./package.json').version)")"
