@@ -95,6 +95,7 @@ export default function Settings(): JSX.Element {
   const [trayEnabled, setTrayEnabled] = useState(false)
   const [minimizeToTray, setMinimizeToTray] = useState(false)
   const [autoUpdate, setAutoUpdate] = useState(false)
+  const [priceApi, setPriceApi] = useState(true)
   const [authModal, setAuthModal] = useState<{ store: "epic" | "gog"; info: AuthStartInfo } | null>(null)
   const [authBusy, setAuthBusy] = useState(false)
 
@@ -103,6 +104,7 @@ export default function Settings(): JSX.Element {
     void window.api.trayGet().then(setTrayEnabled)
     void window.api.minimizeToTrayGet().then(setMinimizeToTray)
     void window.api.settingsKeyGet("autoUpdate").then((v) => setAutoUpdate(v === "1"))
+    void window.api.settingsKeyGet("priceApi.enabled").then((v) => setPriceApi(v !== "0"))
   }, [])
 
   const toggleAutostart = async (next: boolean): Promise<void> => {
@@ -123,6 +125,11 @@ export default function Settings(): JSX.Element {
     if (next && !trayEnabled) return
     const ok = await window.api.minimizeToTraySet(next)
     setMinimizeToTray(ok)
+  }
+
+  const togglePriceApi = async (next: boolean): Promise<void> => {
+    setPriceApi(next)
+    await window.api.settingsKeySet("priceApi.enabled", next ? "1" : "0")
   }
 
   useEffect(() => {
@@ -380,6 +387,22 @@ export default function Settings(): JSX.Element {
           {itadStatus && <p className="muted">{itadStatus}</p>}
         </div>
 
+      </section>
+
+      <section className="settings-section">
+        <h3>{t("settings.section.prices")}</h3>
+        <div className="field switch-field">
+          <span>{t("settings.field.priceApi")}</span>
+          <button
+            className={`switch ${priceApi ? "on" : ""}`}
+            onClick={() => void togglePriceApi(!priceApi)}
+            aria-pressed={priceApi}
+            title={t("settings.field.priceApi.hint")}
+          >
+            <i />
+          </button>
+        </div>
+        <p className="muted">{t("settings.field.priceApi.hint")}</p>
       </section>
 
       <section className="settings-section">

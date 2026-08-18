@@ -6,7 +6,7 @@ const output = process.argv.at(-1)
 if (!output) throw new Error("Usage: electron capture-splash.cjs <output.png>")
 
 app.setName("fliperama")
-app.setVersion("0.1.9")
+app.setVersion("0.2.0")
 require(resolve(__dirname, "../out/main/index.js"))
 
 app.whenReady().then(() => {

@@ -1,6 +1,6 @@
 {
   "name": "fliperama",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Fliperama — hub Electron com launchers via Wine e jogos via UMU/Proton",
   "main": "./out/main/index.js",
   "private": true,

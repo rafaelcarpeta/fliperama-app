@@ -1,3 +1,5 @@
+import { getKey as getSetting } from "./settings"
+
 export interface ApiOffer {
   source: string
   source_observation_id: string | null
@@ -30,8 +32,10 @@ function apiBase(): string {
   return API_BASE_URL
 }
 
+// Gate por settings: desliga a consulta à API de preços (histórico volta a
+// ser 100% local). Default: habilitada (ausente/"1" = on; "0" = off).
 export function apiEnabled(): boolean {
-  return true
+  return getSetting("priceApi.enabled") !== "0"
 }
 
 async function apiGet<T>(path: string): Promise<T | null> {
