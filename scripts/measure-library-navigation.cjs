@@ -2,7 +2,7 @@ const { app, BrowserWindow } = require("electron")
 const { resolve } = require("node:path")
 
 app.setName("fliperama")
-app.setVersion("0.1.7")
+app.setVersion("0.1.9")
 require(resolve(__dirname, "../out/main/index.js"))
 
 app.whenReady().then(() => {

@@ -301,7 +301,7 @@
   "settings.field.minimizeToTray": "Fechar minimiza para a bandeja",
   "settings.field.steamgriddb": "SteamGridDB (artes de jogos)",
   "settings.field.itad": "IsThereAnyDeal (preços de resellers)",
-  "settings.btn.saveArt": "salvar e buscar artes",
+    "settings.btn.saveArt": "salvar e buscar artes",
   "settings.btn.saveItad": "salvar e testar",
   "settings.btn.checkUpdate": "verificar atualização",
   "settings.btn.checkUpdate.checking": "verificando...",

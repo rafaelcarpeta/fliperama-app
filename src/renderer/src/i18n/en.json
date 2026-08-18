@@ -301,7 +301,7 @@
   "settings.field.minimizeToTray": "Close minimizes to tray",
   "settings.field.steamgriddb": "SteamGridDB (game art)",
   "settings.field.itad": "IsThereAnyDeal (reseller prices)",
-  "settings.btn.saveArt": "save and fetch art",
+    "settings.btn.saveArt": "save and fetch art",
   "settings.btn.saveItad": "save and test",
   "settings.btn.checkUpdate": "check for updates",
   "settings.btn.checkUpdate.checking": "checking...",

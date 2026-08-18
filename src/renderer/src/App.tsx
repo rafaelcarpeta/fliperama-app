@@ -81,7 +81,6 @@ export default function App(): JSX.Element {
     const offIndexDone = window.api.onIndexDone(() => {
       const locale = useStore.getState().locale
       setStatus(translate(locale, "library.indexed"))
-      addNotification(translate(locale, "notification.libraryIndexed"), translate(locale, "notification.libraryIndexed.body"))
       void refresh()
     })
     const offUpdate = window.api.onUpdateEvent((e) => {
@@ -91,12 +90,14 @@ export default function App(): JSX.Element {
         addNotification(translate(locale, "notification.updateError"), e.payload)
       } else if (e.type === "available" || e.type === "downloaded") {
         setUpdate({ state: e.type, version: e.payload.version })
-        addNotification(
-          e.type === "available" ? translate(locale, "notification.updateAvailable") : translate(locale, "notification.updateReady"),
-          e.type === "available"
-            ? translate(locale, "notification.updateAvailable.body", { version: e.payload.version })
-            : translate(locale, "notification.updateReady.body", { version: e.payload.version })
-        )
+        if (e.type === "downloaded" || e.payload.notify !== false) {
+          addNotification(
+            e.type === "available" ? translate(locale, "notification.updateAvailable") : translate(locale, "notification.updateReady"),
+            e.type === "available"
+              ? translate(locale, "notification.updateAvailable.body", { version: e.payload.version })
+              : translate(locale, "notification.updateReady.body", { version: e.payload.version })
+          )
+        }
       } else if (e.type === "progress") {
         setUpdate({ state: "progress", percent: e.payload.percent })
       } else {

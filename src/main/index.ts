@@ -11,13 +11,14 @@ import * as prices from "./prices"
 import * as art from "./art"
 import * as settings from "./settings"
 import {
-    initUpdater,
-    checkForUpdates,
-    downloadUpdate,
-    installUpdate,
-    checkAndInstall,
-    configureAuto,
-  } from "./update"
+  initUpdater,
+  checkForUpdates,
+  startAutomaticUpdateChecks,
+  downloadUpdate,
+  installUpdate,
+  checkAndInstall,
+  configureAuto,
+} from "./update"
 import { createThrottledEmitter } from "./throttle"
 import * as stress from "./stress"
 import * as deps from "./deps"
@@ -257,6 +258,7 @@ app.whenReady().then(() => {
   })
   // Aplica a preferência de autoUpdate persistida no settings (chave "autoUpdate").
   configureAuto(settings.getKey("autoUpdate") === "1")
+  startAutomaticUpdateChecks()
   setProgress(35, "Backends e atualizações")
 
   ipcMain.handle("update:check", () => checkForUpdates())

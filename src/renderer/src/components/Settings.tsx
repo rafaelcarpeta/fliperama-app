@@ -379,6 +379,7 @@ export default function Settings(): JSX.Element {
           </button>
           {itadStatus && <p className="muted">{itadStatus}</p>}
         </div>
+
       </section>
 
       <section className="settings-section">

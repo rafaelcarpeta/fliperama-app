@@ -196,7 +196,7 @@ export interface DepsPlan {
 
 export type UpdateEvent =
   | { type: "checking" }
-  | { type: "available"; payload: { version: string } }
+  | { type: "available"; payload: { version: string; notify?: boolean } }
   | { type: "not-available" }
   | { type: "progress"; payload: { percent: number } }
   | { type: "downloaded"; payload: { version: string } }

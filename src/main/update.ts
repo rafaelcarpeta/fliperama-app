@@ -1,15 +1,21 @@
-import { Notification } from "electron"
+import { app, Notification } from "electron"
 import { autoUpdater } from "electron-updater"
 
 export type UpdateEvent =
   | { type: "checking" }
-  | { type: "available"; payload: { version: string } }
+  | { type: "available"; payload: { version: string; notify?: boolean } }
   | { type: "not-available" }
   | { type: "progress"; payload: { percent: number } }
   | { type: "downloaded"; payload: { version: string } }
   | { type: "error"; payload: string }
 
 let eventSink: ((e: UpdateEvent) => void) | null = null
+let lastNotifiedVersion: string | null = null
+let automaticCheckTimeout: NodeJS.Timeout | null = null
+let automaticCheckInterval: NodeJS.Timeout | null = null
+
+const STARTUP_CHECK_DELAY_MS = 10_000
+const PERIODIC_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000
 
 // Quando o usuário aciona o fluxo único (verificar → baixar → instalar), o
 // download manual dispara o quitAndInstall assim que termina — diferente do
@@ -28,8 +34,10 @@ export function initUpdater(onEvent: (e: UpdateEvent) => void): void {
 
   autoUpdater.on("checking-for-update", () => emit({ type: "checking" }))
   autoUpdater.on("update-available", (info) => {
-    emit({ type: "available", payload: { version: info.version } })
-    if (Notification.isSupported()) {
+    const shouldNotify = lastNotifiedVersion !== info.version
+    lastNotifiedVersion = info.version
+    emit({ type: "available", payload: { version: info.version, notify: shouldNotify } })
+    if (shouldNotify && Notification.isSupported()) {
       new Notification({
         title: "Atualização disponível",
         body: `Versão ${info.version}. Baixar em Configurações.`,
@@ -65,6 +73,22 @@ export function configureAuto(auto: boolean): void {
 
 export function checkForUpdates(): void {
   void autoUpdater.checkForUpdates().catch((e) => emit({ type: "error", payload: (e as Error).message }))
+}
+
+// Verifica sem intervenção do usuário. O autoDownload continua respeitando a
+// preferência configurada; com ele desligado, esta rotina apenas avisa que há
+// uma nova versão. A repetição cobre sessões que ficam abertas por vários dias.
+export function startAutomaticUpdateChecks(): void {
+  if (!app.isPackaged || automaticCheckTimeout || automaticCheckInterval) return
+
+  automaticCheckTimeout = setTimeout(() => {
+    automaticCheckTimeout = null
+    checkForUpdates()
+  }, STARTUP_CHECK_DELAY_MS)
+  automaticCheckTimeout.unref()
+
+  automaticCheckInterval = setInterval(checkForUpdates, PERIODIC_CHECK_INTERVAL_MS)
+  automaticCheckInterval.unref()
 }
 
 // Fluxo único: verifica, baixa e instala (reinicia) — usado pelo botão.

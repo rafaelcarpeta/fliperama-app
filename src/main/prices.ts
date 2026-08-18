@@ -10,6 +10,7 @@ import {
   type PricePointInput,
 } from "./workers/normalize"
 import { getKey as settingsGetKey } from "./settings"
+import { apiEnabled, apiPricesForApp } from "./apiClient"
 
 export interface PricePoint {
   price: number
@@ -592,8 +593,25 @@ export async function refreshApps(
   return out
 }
 
-// Histórico local apenas (sem consulta à rede) para os appids informados.
+// Histórico dos appids: consulta a API (quando configurada) com fallback total
+// para o histórico local se qualquer consulta falhar.
 export async function historyFor(appids: number[]): Promise<GamePrice[]> {
+  if (apiEnabled()) {
+    const fromApi = await apiHistoryForAppids(appids)
+    if (fromApi) {
+      const out: GamePrice[] = []
+      for (const gp of fromApi) {
+        out.push({
+          appid: gp.appid,
+          name: gp.name,
+          lowestSeen: gp.lowestSeen,
+          newLow: false,
+          history: gp.history,
+        })
+      }
+      return out
+    }
+  }
   const store = loadHistory()
   const inputs: PricePointInput[] = appids.map((id) => ({
     appid: id,
@@ -621,4 +639,34 @@ export async function historyFor(appids: number[]): Promise<GamePrice[]> {
 export function clearHistory(): void {
   historyCache = {}
   saveHistory(historyCache)
+}
+
+interface ApiHistoryGame {
+  appid: number
+  name: string
+  lowestSeen?: number
+  history: PricePoint[]
+}
+
+async function apiHistoryForAppids(appids: number[]): Promise<ApiHistoryGame[] | null> {
+  const out: ApiHistoryGame[] = []
+  for (const appid of appids) {
+    const data = await apiPricesForApp(appid)
+    if (!data) return null
+    const history: PricePoint[] = (data.history ?? [])
+      .filter((o) => o.price_minor !== null && o.observed_at !== null)
+      .map((o) => ({
+        price: (o.price_minor ?? 0) as number,
+        timestamp: Date.parse(o.observed_at as string),
+        source: o.source,
+      }))
+      .filter((p) => Number.isFinite(p.timestamp))
+    out.push({
+      appid,
+      name: data.name,
+      lowestSeen: data.lowest?.price_minor ?? undefined,
+      history,
+    })
+  }
+  return out
 }

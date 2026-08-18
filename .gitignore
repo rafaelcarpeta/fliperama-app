@@ -9,7 +9,5 @@ netlog.txt
 tmp/
 *.diff
 images
-site images/
 *.md
 !README.md
-site/

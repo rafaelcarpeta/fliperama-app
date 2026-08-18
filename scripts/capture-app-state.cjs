@@ -7,7 +7,7 @@ const output = process.argv.at(-1)
 if (!state || !output) throw new Error("Usage: electron capture-app-state.cjs <state> <output.png>")
 
 app.setName("fliperama")
-app.setVersion("0.1.7")
+app.setVersion("0.1.9")
 require(resolve(__dirname, "../out/main/index.js"))
 
 const actions = {
