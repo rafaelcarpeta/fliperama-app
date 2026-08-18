@@ -2,6 +2,10 @@
 # Publica o release do Fliperama no servidor de arquivos próprio (note:192.168.3.21)
 # e valida o feed de update (latest-linux.yml + AppImage).
 # Uso: npm run publish:server
+#
+# ssh/scp usam -F /dev/null (ignora /etc/ssh/ssh_config.d/*): desde 2026-08-17 o
+# cliente OpenSSH rejeita 20-systemd-ssh-proxy.conf ("Bad owner or permissions",
+# alvo com 777/dono inválido). -F /dev/null não altera identidade/servidor/porta.
 set -euo pipefail
 
 SERVER="server@192.168.3.21"
@@ -14,7 +18,7 @@ VERSION="$(node -e "console.log(require('./package.json').version)")"
 echo "==> Versão a publicar: $VERSION"
 
 echo "==> Garantir pasta no servidor"
-sshpass -p "$PASS" ssh -p "$PORT" -o StrictHostKeyChecking=no "$SERVER" "mkdir -p $DEST"
+sshpass -p "$PASS" ssh -F /dev/null -p "$PORT" -o StrictHostKeyChecking=no "$SERVER" "mkdir -p $DEST"
 
 echo "==> Build (electron-vite + AppImage)"
 npm run dist
@@ -35,7 +39,7 @@ fi
 echo "sha512 OK"
 
 echo "==> Upload para ${SERVER}:${DEST}"
-sshpass -p "$PASS" scp -P "$PORT" -o StrictHostKeyChecking=no "$APPIMAGE" "$YML" "${SERVER}:${DEST}/"
+sshpass -p "$PASS" scp -F /dev/null -P "$PORT" -o StrictHostKeyChecking=no "$APPIMAGE" "$YML" "${SERVER}:${DEST}/"
 
 echo "==> Validação pública (download via feed)"
 YML_NAME="latest-linux.yml"
