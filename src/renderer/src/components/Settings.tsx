@@ -9,6 +9,160 @@ const KEY_LINKS: Record<string, string> = {
   itad: "https://isthereanydeal.com/apps/my/",
 }
 
+function FliperamaAccountCard(): JSX.Element {
+  const { t, locale } = useI18n()
+  const [account, setAccount] = useState<Awaited<ReturnType<typeof window.api.accountStatus>> | null>(null)
+  const [email, setEmail] = useState("")
+  const [challengeId, setChallengeId] = useState("")
+  const [code, setCode] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState("")
+
+  useEffect(() => {
+    let active = true
+    void window.api
+      .accountStatus()
+      .then((status) => {
+        if (active) setAccount(status)
+      })
+      .catch((error: unknown) => {
+        if (!active) return
+        setAccount({ connected: false, persistent: false })
+        setMessage(t("account.status.error", { message: (error as Error).message }))
+      })
+    return () => {
+      active = false
+    }
+  }, [locale])
+
+  const start = async (): Promise<void> => {
+    if (!email.trim()) return
+    setBusy(true)
+    setMessage("")
+    try {
+      const result = await window.api.accountEmailStart(email.trim(), locale)
+      setChallengeId(result.challenge_id)
+      setMessage(t("account.code.sent", { minutes: Math.max(1, Math.ceil(result.expires_in / 60)) }))
+    } catch (error) {
+      setMessage(t("account.error", { message: (error as Error).message }))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const verify = async (): Promise<void> => {
+    if (!challengeId || !/^\d{6}$/.test(code.trim())) return
+    setBusy(true)
+    setMessage("")
+    try {
+      const result = await window.api.accountEmailVerify(challengeId, code.trim())
+      setAccount(result)
+      setEmail("")
+      setCode("")
+      setChallengeId("")
+      setMessage(result.persistent ? t("account.connected") : t("account.session.memoryOnly"))
+    } catch (error) {
+      setMessage(t("account.error", { message: (error as Error).message }))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const logout = async (): Promise<void> => {
+    setBusy(true)
+    setMessage("")
+    try {
+      await window.api.accountLogout()
+      setAccount({ connected: false, persistent: account?.persistent ?? false })
+    } catch (error) {
+      setAccount({ connected: false, persistent: account?.persistent ?? false })
+      setMessage(t("account.logout.localOnly", { message: (error as Error).message }))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="settings-section">
+      <h3>{t("account.title")}</h3>
+      <p className="muted">{t("account.hint")}</p>
+      {account === null ? (
+        <p className="muted">{t("common.loading")}</p>
+      ) : account.connected ? (
+        <div className="field">
+          <label>{account.user?.display_name || account.user?.email}</label>
+          <p className="muted">{t("account.sync.ready")}</p>
+          <div className="toolbar">
+            <button className="btn ghost" disabled={busy} onClick={() => void logout()}>
+              {t("account.logout")}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="field">
+          <label htmlFor="fliperama-account-email">{t("account.email")}</label>
+          <input
+            id="fliperama-account-email"
+            type="email"
+            value={email}
+            autoComplete="email"
+            maxLength={254}
+            disabled={busy || Boolean(challengeId)}
+            placeholder="voce@exemplo.com"
+            onChange={(event) => setEmail(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !challengeId) void start()
+            }}
+          />
+          {!challengeId ? (
+            <button className="btn" disabled={busy || !email.trim()} onClick={() => void start()}>
+              {busy ? "..." : t("account.sendCode")}
+            </button>
+          ) : (
+            <>
+              <label htmlFor="fliperama-account-code">{t("account.code")}</label>
+              <input
+                id="fliperama-account-code"
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={code}
+                disabled={busy}
+                autoComplete="one-time-code"
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void verify()
+                }}
+              />
+              <div className="toolbar">
+                <button className="btn" disabled={busy || code.length !== 6} onClick={() => void verify()}>
+                  {busy ? "..." : t("account.verify")}
+                </button>
+                <button
+                  className="btn ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    setChallengeId("")
+                    setCode("")
+                    setMessage("")
+                  }}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {message && (
+        <p className="muted" role="status" aria-live="polite">
+          {message}
+        </p>
+      )}
+    </section>
+  )
+}
+
 function AuthModal({
   store,
   info,
@@ -454,6 +608,8 @@ export default function Settings(): JSX.Element {
           )
         })}
       </section>
+
+      <FliperamaAccountCard />
 
       <section className="settings-section">
         <h3>{t("settings.section.updates")}</h3>

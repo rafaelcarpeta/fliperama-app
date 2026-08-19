@@ -18,6 +18,7 @@ import {
   installUpdate,
   checkAndInstall,
   configureAuto,
+  clearUpdateAuthorization,
 } from "./update"
 import { createThrottledEmitter } from "./throttle"
 import * as stress from "./stress"
@@ -33,6 +34,7 @@ import * as wemodCatalog from "./wemodCatalog"
 import * as wemodBuiltPrefix from "./wemodBuiltPrefix"
 import * as backends from "./backends"
 import * as auth from "./auth"
+import * as fliperamaAccount from "./fliperamaAccount"
 import * as library from "./library"
 import * as downloads from "./downloads"
 import * as imgCache from "./imgCache"
@@ -770,6 +772,20 @@ app.whenReady().then(() => {
   )
   ipcMain.handle("auth:status", (_e, store: auth.Store) => auth.authStatus(store))
   ipcMain.handle("auth:logout", (_e, store: auth.Store) => auth.logout(store))
+  ipcMain.handle("account:email:start", (_e, email: string, locale: string) =>
+    fliperamaAccount.startEmail(email, locale)
+  )
+  ipcMain.handle("account:email:verify", (_e, challengeId: string, code: string) =>
+    fliperamaAccount.verifyEmail(challengeId, code)
+  )
+  ipcMain.handle("account:status", () => fliperamaAccount.status())
+  ipcMain.handle("account:logout", async () => {
+    try {
+      await fliperamaAccount.logout()
+    } finally {
+      clearUpdateAuthorization()
+    }
+  })
 
   ipcMain.handle("library:games", () => {
     countCall("library:games")

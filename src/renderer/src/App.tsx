@@ -89,7 +89,11 @@ export default function App(): JSX.Element {
     })
     const offUpdate = window.api.onUpdateEvent((e) => {
       const locale = useStore.getState().locale
-      if (e.type === "error") {
+      if (e.type === "account-required") {
+        const message = translate(locale, "settings.update.accountRequired")
+        setUpdate({ state: "error", error: message })
+        addNotification(translate(locale, "notification.updateError"), message)
+      } else if (e.type === "error") {
         setUpdate({ state: "error", error: e.payload })
         addNotification(translate(locale, "notification.updateError"), e.payload)
       } else if (e.type === "available" || e.type === "downloaded") {

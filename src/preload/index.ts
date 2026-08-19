@@ -149,6 +149,20 @@ export interface SteamStatus {
   indexed: number
 }
 
+export interface FliperamaUserInfo {
+  id: string
+  email: string
+  display_name: string | null
+  avatar_url?: string | null
+  leaderboard_visible?: boolean
+}
+
+export interface FliperamaAccountStatus {
+  connected: boolean
+  user?: FliperamaUserInfo
+  persistent: boolean
+}
+
 export interface PricePoint {
   price: number
   timestamp: number
@@ -220,6 +234,7 @@ export interface DepsPlan {
 
 export type UpdateEvent =
   | { type: "checking" }
+  | { type: "account-required" }
   | { type: "available"; payload: { version: string; notify?: boolean } }
   | { type: "not-available" }
   | { type: "progress"; payload: { percent: number } }
@@ -687,6 +702,12 @@ const api = {
   authStatus: (store: "epic" | "gog"): Promise<AuthStatusInfo> =>
     ipcRenderer.invoke("auth:status", store),
   authLogout: (store: "epic" | "gog"): Promise<void> => ipcRenderer.invoke("auth:logout", store),
+  accountEmailStart: (email: string, locale: string): Promise<{ challenge_id: string; expires_in: number }> =>
+    ipcRenderer.invoke("account:email:start", email, locale),
+  accountEmailVerify: (challengeId: string, code: string): Promise<FliperamaAccountStatus> =>
+    ipcRenderer.invoke("account:email:verify", challengeId, code),
+  accountStatus: (): Promise<FliperamaAccountStatus> => ipcRenderer.invoke("account:status"),
+  accountLogout: (): Promise<void> => ipcRenderer.invoke("account:logout"),
   libraryGames: (): Promise<{ epic: BackendGame[]; gog: BackendGame[] }> =>
     ipcRenderer.invoke("library:games"),
   libraryGamesCached: (): Promise<{ epic: BackendGame[]; gog: BackendGame[]; fromCache: boolean }> =>

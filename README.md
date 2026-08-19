@@ -63,7 +63,7 @@ Pipeline de release: `bump version` → `npm run publish:server`
 O **app não é publicado via GitHub Releases** — o `latest-linux.yml` mora no
 servidor e o feed é lido diretamente pelo `electron-updater`.
 
-Release atual: **v0.3.0** — [AppImage](https://files.fliperama.top/fliperama/Fliperama-0.3.0.AppImage) · [feed](https://files.fliperama.top/fliperama/latest-linux.yml).
+Release atual: **v0.3.2** — [AppImage](https://files.fliperama.top/fliperama/Fliperama-0.3.2.AppImage) · [feed](https://files.fliperama.top/fliperama/latest-linux.yml).
 
 Configuração em `package.json`:
 
