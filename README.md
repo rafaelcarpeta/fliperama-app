@@ -77,7 +77,7 @@ Configuração em `package.json`:
 ### GitHub Releases: prefixos pré-configurados (não são o app)
 
 As releases do repositório no GitHub — como
-[built-prefixes-v1](https://github.com/rafaelcarpeta/fliperamabr/releases/tag/built-prefixes-v1) —
+[built-prefixes-v1](https://github.com/rafaelcarpeta/fliperama-app/releases/tag/built-prefixes-v1) —
 **não são o aplicativo** e não são usadas pelo `electron-updater`. Elas
 contêm **prefixos Wine pré-configurados** (built prefixes) que o Fliperama
 baixa em runtime.
@@ -108,7 +108,7 @@ quebrar o Proton do jogo.
 
 A escolha vem do `config_info` do compatdata para jogos Steam ou do default
 de Proton configurado por launcher (GOG/Epic/...); a busca é **cache local →
-release do fliperamabr → fallback**. Por isso esses arquivos só fazem sentido
+release do fliperama-app → fallback**. Por isso esses arquivos só fazem sentido
 junto do app: baixar e usar um deles manualmente exige descompactar dentro de
 um prefixo Wine existente — sozinhos, não são instaláveis nem executáveis.
 

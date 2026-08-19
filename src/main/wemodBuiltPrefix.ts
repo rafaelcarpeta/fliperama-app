@@ -19,10 +19,10 @@ const execFileAsync = promisify(execFile)
 const REPO = "rafaelcarpeta/Action-Shark"
 const RELEASES_URL = `https://api.github.com/repos/${REPO}/releases`
 
-// Fonte principal alinhada ao Proton: release do fliperamabr com os built
+// Fonte principal alinhada ao Proton: release do fliperama-app com os built
 // prefixes por Proton (GE-Proton11-5, CachyOS, Experimental). Queda para o
 // Action-Shark apenas para o fallback GE-Proton10.1.
-const FLIPERAMA_REPO = "rafaelcarpeta/fliperamabr"
+const FLIPERAMA_REPO = "rafaelcarpeta/fliperama-app"
 const FLIPERAMA_TAG = "built-prefixes-v1"
 const FLIPERAMA_RELEASE_URL = `https://api.github.com/repos/${FLIPERAMA_REPO}/releases/tags/${FLIPERAMA_TAG}`
 const FALLBACK_ASSET = "GE-Proton10.1.zip"
@@ -176,7 +176,7 @@ interface PickedAsset {
   name: string
   url: string | null
   zipPath?: string
-  source: "cache" | "fliperamabr" | "actionshark"
+  source: "cache" | "fliperama-app" | "actionshark"
   score: number
 }
 
@@ -194,7 +194,7 @@ function isFallbackAsset(name: string): boolean {
 }
 
 // Escolhe o built prefix para o Proton: cache local do Fliperama → release do
-// fliperamabr → fallback GE-Proton10.1 (Action-Shark) quando nada casa.
+// fliperama-app → fallback GE-Proton10.1 (Action-Shark) quando nada casa.
 async function pickBuiltPrefixAsset(hint?: ProtonHint): Promise<PickedAsset> {
   const hc = classifyProton(hint ?? {})
   const cands: PickedAsset[] = []
@@ -207,7 +207,7 @@ async function pickBuiltPrefixAsset(hint?: ProtonHint): Promise<PickedAsset> {
     const rel = await fetchFliperamaRelease()
     for (const a of rel.assets ?? []) {
       if (!/\.zip$/i.test(a.name)) continue
-      cands.push({ name: a.name, url: a.browser_download_url, source: "fliperamabr", score: scoreZip(classifyProton({ name: a.name }), hc) })
+      cands.push({ name: a.name, url: a.browser_download_url, source: "fliperama-app", score: scoreZip(classifyProton({ name: a.name }), hc) })
     }
   } catch {
     // release indisponível — segue com cache / fallback
@@ -223,7 +223,7 @@ async function pickBuiltPrefixAsset(hint?: ProtonHint): Promise<PickedAsset> {
   const releases = await fetchBuiltPrefixReleases()
   const all = releases.flatMap((rel) => rel.assets ?? [])
   const fallback = all.find((a) => isFallbackAsset(a.name)) ?? all.find((a) => /\.zip$/i.test(a.name))
-  if (!fallback) throw new Error("nenhum built prefix disponível (cache, fliperamabr ou Action-Shark)")
+  if (!fallback) throw new Error("nenhum built prefix disponível (cache, fliperama-app ou Action-Shark)")
   return { name: fallback.name, url: fallback.browser_download_url, source: "actionshark", score: 0 }
 }
 
