@@ -38,6 +38,7 @@ export default function App(): JSX.Element {
   const setStatus = useStore((s) => s.setStatus)
   const setUpdate = useStore((s) => s.setUpdate)
   const addNotification = useStore((s) => s.addNotification)
+  const applyWemodCatalog = useStore((s) => s.applyWemodCatalog)
   const setLocale = useStore((s) => s.setLocale)
   const launcherExited = useStore((s) => s.launcherExited)
   // O painel direito fica sempre visível na view "biblioteca" — sem
@@ -59,7 +60,10 @@ export default function App(): JSX.Element {
       void window.api.bootProgress(92)
       setTimeout(sendBootReady, 6000)
     })()
-  }, [setLocale, loadCached, refresh])
+    // Catálogo WeMod: pede o refresh de rede (o main também dispara no boot);
+    // o resultado chega via onWemodCatalogUpdated (assinado abaixo).
+    void window.api.wemodCatalogRefresh().catch(() => undefined)
+  }, [setLocale, loadCached, refresh, applyWemodCatalog])
 
   useEffect(() => {
     const offLibRefreshed = window.api.onLibraryRefreshed((fresh) => {
@@ -159,6 +163,9 @@ export default function App(): JSX.Element {
         translate(locale, "library.status.downloading", { name, percent: Math.round(p.percent) })
       )
     })
+    const offWemodCatalog = window.api.onWemodCatalogUpdated((c) => {
+      if (c.games.length > 0) applyWemodCatalog(c.games, c.fetchedAt)
+    })
     const offDlDone = window.api.onLibraryInstallDone((d) => {
       const locale = useStore.getState().locale
       if (d.ok) {
@@ -186,8 +193,9 @@ export default function App(): JSX.Element {
       offBackend()
       offDlProgress()
       offDlDone()
+      offWemodCatalog()
     }
-  }, [refresh, setRunning, setStatus, setUpdate, addNotification, applyLibraryRefreshed, launcherExited])
+  }, [refresh, setRunning, setStatus, setUpdate, addNotification, applyLibraryRefreshed, launcherExited, applyWemodCatalog])
 
   return (
     <div className="app">

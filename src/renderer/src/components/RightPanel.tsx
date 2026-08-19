@@ -111,22 +111,15 @@ export default function RightPanel(): JSX.Element {
   const setWemodEnabled = useStore((s) => s.setWemodEnabled)
   const trainerFiles = useStore((s) => s.trainerFiles)
   const setTrainerFiles = useStore((s) => s.setTrainerFiles)
-  const flingTrainer = useStore((s) => s.flingTrainer)
-  const setFlingTrainer = useStore((s) => s.setFlingTrainer)
-  const [defaultProton, setDefaultProton] = useState<string>("")
-  useEffect(() => {
-    void window.api.protonDefaultGet().then((p) => setDefaultProton(p ?? ""))
-  }, [])
-  const changeProton = (path: string): void => {
-    setDefaultProton(path)
-    void window.api.protonDefaultSet(path || null)
-  }
+  const trainerEnabled = useStore((s) => s.trainerEnabled)
+  const setTrainerEnabled = useStore((s) => s.setTrainerEnabled)
+  const wemodSupported = useStore((s) => s.wemodSupported)
+  // Proton padrão por launcher (execução/jogos) — persistido em
+  // launchers/<id>.json. Steam é read-only (gerenciado pelo cliente Steam).
+  const launcherProtons = useStore((s) => s.launcherProtons)
+  const setLauncherProton = useStore((s) => s.setLauncherProton)
   const protonList = protons.filter((p) => !p.automatic)
-  const protonLabel = (path: string): string => {
-    if (!path) return t("right.panel.proton.auto")
-    const found = protonList.find((p) => p.path === path)
-    return found ? found.name : path.split("/").pop() ?? path
-  }
+  const [steamProton, setSteamProton] = useState<{ name: string | null; version: string | null } | null>(null)
   const [menu, setMenu] = useState(false)
   const [showArt, setShowArt] = useState(false)
   const [gamemodeOn, setGamemodeOn] = useState(false)
@@ -208,6 +201,15 @@ export default function RightPanel(): JSX.Element {
   useEffect(() => {
     if (isBackend && g) void resolveBackendDetails(g.id, g.name)
   }, [isBackend, g, resolveBackendDetails])
+
+  // Proton do jogo Steam vindo do config_info do compatdata (read-only).
+  useEffect(() => {
+    if (isSteam && gAppid) {
+      void window.api.steamGameProton(gAppid).then(setSteamProton).catch(() => setSteamProton(null))
+    } else {
+      setSteamProton(null)
+    }
+  }, [isSteam, gAppid])
 
   if (!game && !launcher) {
     return (
@@ -298,6 +300,29 @@ export default function RightPanel(): JSX.Element {
 
         <div className="quick-options">
           <span className="nav-label">{t("right.panel.performance")}</span>
+          {l.native ? (
+            <div className="quick-row" title={t("right.panel.proton.steam.hint")}>
+              <span className="quick-row-label">{t("right.panel.proton.steam")}</span>
+              <b className="quick-row-value">{t("right.panel.proton.steam.managed")}</b>
+            </div>
+          ) : (
+            <div className="quick-row">
+              <span className="quick-row-label">{t("right.panel.proton.default")}</span>
+              <select
+                className="quick-select"
+                value={launcherProtons[l.id] ?? ""}
+                onChange={(e) => setLauncherProton(l.id, e.target.value)}
+                title={t("right.panel.proton.default.hint") + " — " + t("right.panel.proton.install.hint")}
+              >
+                <option value="">{t("right.panel.proton.auto")}</option>
+                {protonList.map((p) => (
+                  <option key={p.path ?? p.name} value={p.path ?? ""}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <button className="quick-btn" onClick={() => openSite(l.web)}>{t("right.panel.menu.website")}</button>
           <button className="quick-btn" title={t("right.panel.placeholder", { label: t("right.panel.gameSettings") })}>
             {t("right.panel.gameSettings")}
@@ -316,6 +341,10 @@ export default function RightPanel(): JSX.Element {
   // Após os early-returns, `game` está garantido. Usamos `!` no narrowing
   // (o early-return já trata o caso undefined).
   const gg = game!
+  // Trainer suportado = existe .exe na pasta que casa com o nome do jogo;
+  // WeMod suportado = jogo na lista do catálogo WeMod (com a plataforma certa).
+  const trainer = matchTrainer(gg.name, trainerFiles)
+  const wemodOk = !!wemodSupported[gg.id]
   const isHidden = hidden.includes(gg.id)
   const storeLabel = gg.store === "steam" ? "Steam" : gg.store === "gog" ? "GOG" : "Epic"
   const storePage =
@@ -481,36 +510,48 @@ export default function RightPanel(): JSX.Element {
       </div>
       <div className="quick-options">
         <span className="nav-label">{t("right.panel.performance")}</span>
-        {matchTrainer(gg.name, trainerFiles) && (
-          <Switch
-            label={t("right.panel.flingTrainer")}
-            title={t("right.panel.flingTrainer.hint")}
-            on={flingTrainer.includes(gg.id)}
-            onChange={(next) => setFlingTrainer(gg.id, next)}
-          />
-        )}
+        <Switch
+          label={t("right.panel.trainer")}
+          title={trainer ? t("right.panel.trainer.hint") : t("right.panel.notSupported")}
+          on={!!trainer && trainerEnabled.includes(gg.id)}
+          onChange={(next) => setTrainerEnabled(gg.id, next)}
+          disabled={!trainer}
+        />
         <Switch
           label={t("right.panel.wemod")}
-          title={t("right.panel.wemod.hint")}
-          on={gg.store === "steam" || gg.store === "epic" || gg.store === "gog" ? wemodEnabled.includes(gg.id) : false}
+          title={wemodOk ? t("right.panel.wemod.hint") : t("right.panel.notSupported")}
+          on={wemodOk && wemodEnabled.includes(gg.id)}
           onChange={(next) => setWemodEnabled(gg.id, next)}
+          disabled={!wemodOk}
         />
-        <div className="quick-row">
-          <span className="quick-row-label">{t("right.panel.proton.default")}</span>
-          <select
-            className="quick-select"
-            value={defaultProton}
-            onChange={(e) => changeProton(e.target.value)}
-            title={t("right.panel.proton.default.hint")}
-          >
-            <option value="">{t("right.panel.proton.auto")}</option>
-            {protonList.map((p) => (
-              <option key={p.path ?? p.name} value={p.path ?? ""}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {isSteam ? (
+          <div className="quick-row" title={t("right.panel.proton.steam.hint")}>
+            <span className="quick-row-label">{t("right.panel.proton.steam")}</span>
+            <b className="quick-row-value">
+              {steamProton
+                ? [steamProton.name, steamProton.version].filter(Boolean).join(" · ") ||
+                  t("right.panel.proton.steam.unknown")
+                : t("right.panel.proton.steam.unknown")}
+            </b>
+          </div>
+        ) : (
+          <div className="quick-row">
+            <span className="quick-row-label">{t("right.panel.proton.default")}</span>
+            <select
+              className="quick-select"
+              value={launcherProtons[gg.store] ?? ""}
+              onChange={(e) => setLauncherProton(gg.store, e.target.value)}
+              title={t("right.panel.proton.default.hint") + " — " + t("right.panel.proton.install.hint")}
+            >
+              <option value="">{t("right.panel.proton.auto")}</option>
+              {protonList.map((p) => (
+                <option key={p.path ?? p.name} value={p.path ?? ""}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {gg.store === "gog" && (
           <>
             <Switch

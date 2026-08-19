@@ -16,6 +16,7 @@ import * as processes from "./processes"
 import * as umu from "./umu"
 import * as launcherConfig from "./launcherConfig"
 import { perfLog } from "./perf"
+import { installProton } from "./proton"
 
 // Bibliotecas não-Steam via backends (padrão Heroic):
 // - Epic/Amazon: legendary (list + metadata + list-installed).
@@ -844,8 +845,9 @@ export async function playGog(game: BackendGame): Promise<{ pid: number | undefi
   // Sem Galaxy, garantir que o prefixo de jogo existe antes do play — o Proton
   // inicializa o prefixo (drive_c/system.reg) via createPrefix se ausente.
   if (!existsSync(join(prefix, "drive_c"))) {
-    const proton = launcherConfig.getConfig("gog").proton
-    await umu.createPrefix(prefix, proton ?? undefined)
+    // Criação de prefixo com o proton de instalação (UMU fixo); o run usa o
+    // proton padrão do GOG (config) — separação instalação × jogos.
+    await umu.createPrefix(prefix, installProton())
   }
   return playViaUmu(game, join(game.installDir, exe), prefix)
 }

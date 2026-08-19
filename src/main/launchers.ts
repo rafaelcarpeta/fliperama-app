@@ -15,6 +15,7 @@ import * as umu from "./umu"
 import * as prefix from "./prefix"
 import * as launcherConfig from "./launcherConfig"
 import * as steam from "./steam"
+import { installProton } from "./proton"
 
 const FLATPAK_STEAM_ID = "com.valvesoftware.Steam"
 
@@ -393,7 +394,10 @@ export async function install(id: string, cb: InstallCallbacks = {}): Promise<pr
   }
   const installerUrl = l.installerUrl
   const installerName = l.installerName
-  const proton = launcherConfig.protonFor(l.id)
+  // Instalação SEMPRE com o proton de instalação (UMU-Proton fixo) — o
+  // proton padrão do launcher (config proton) é para execução/jogos e nunca
+  // para criar o prefixo (GE/CachyOS quebram a criação com umu-run 1.4.3).
+  const proton = installProton()
   const envVars = launcherConfig.getConfig(l.id).envVars
   const dir = prefixDir(l.id)
   const systemReg = join(dir, "drive_c", "windows", "system.reg")

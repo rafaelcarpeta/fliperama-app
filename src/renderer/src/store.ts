@@ -6,6 +6,7 @@ import {
   type Locale,
 } from "./i18n"
 import { matchTrainer as _matchTrainer, type TrainerExe } from "./trainerMatch"
+import { buildWemodSupport, type WemodGameInfo } from "./wemodMatch"
 
 // Reexporta o matcher de trainers (lógica pura em trainerMatch.ts).
 export const matchTrainer = _matchTrainer
@@ -111,9 +112,11 @@ export interface Proton {
 }
 
 export interface Prefix {
+  id: string
   name: string
   path: string
-  created: string
+  source: "fliperama" | "steam"
+  focused: boolean
 }
 
 export interface SteamGame {
@@ -367,8 +370,14 @@ interface FliperamaState {
   setWemodEnabled: (id: string, on: boolean) => void
   trainerFiles: TrainerExe[]
   setTrainerFiles: (files: TrainerExe[]) => void
-  flingTrainer: string[]
-  setFlingTrainer: (id: string, on: boolean) => void
+  trainerEnabled: string[]
+  setTrainerEnabled: (id: string, on: boolean) => void
+  wemodCatalog: WemodGameInfo[]
+  wemodCatalogFetchedAt: number | null
+  wemodSupported: Record<string, boolean>
+  launcherProtons: Record<string, string>
+  setLauncherProton: (id: string, path: string) => void
+  applyWemodCatalog: (catalog: WemodGameInfo[], fetchedAt?: number | null) => void
   update: UpdateStatus | null
   setUpdate: (u: UpdateStatus) => void
   checkUpdate: () => Promise<void>
@@ -413,7 +422,7 @@ function loadWemodEnabled(): string[] {
   return []
 }
 
-function loadFlingTrainer(): string[] {
+function loadTrainerEnabled(): string[] {
   try {
     const raw = localStorage.getItem("fliperama-fling-trainer")
     if (raw) {
@@ -430,6 +439,19 @@ function loadHidden(): string[] {
   // Limpa o resíduo da chave localStorage (decisão 2026-08-10: limpar de vez).
   try { localStorage.removeItem("fliperama-hidden") } catch {}
   return []
+}
+
+// Proton padrão por launcher (persistido em launchers/<id>.json → campo proton).
+const LAUNCHER_IDS = ["steam", "epic", "gog", "battlenet", "ubisoft", "ea", "rockstar"] as const
+
+async function loadLauncherProtonsFromApi(): Promise<Record<string, string>> {
+  const out: Record<string, string> = {}
+  const res = await Promise.allSettled(LAUNCHER_IDS.map((id) => window.api.launcherConfigGet(id)))
+  LAUNCHER_IDS.forEach((id, i) => {
+    const r = res[i]
+    if (r.status === "fulfilled") out[id] = r.value.proton ?? ""
+  })
+  return out
 }
 
 // Payload das bibliotecas Epic/GOG (cache ou online) exposto pelo preload.
@@ -500,7 +522,11 @@ export const useStore = create<FliperamaState>((set, get) => ({
   hidden: loadHidden(),
   removed: [],
   wemodEnabled: loadWemodEnabled(),
-  flingTrainer: loadFlingTrainer(),
+  trainerEnabled: loadTrainerEnabled(),
+  wemodCatalog: [],
+  wemodCatalogFetchedAt: null,
+  wemodSupported: {},
+  launcherProtons: {},
   trainerFiles: [],
   backends: [],
   auth: {},
@@ -658,6 +684,17 @@ export const useStore = create<FliperamaState>((set, get) => ({
     } catch (e) {
       console.error("[loadCached]:", (e as Error).message)
     }
+    // Catálogo WeMod salvo (sem rede): cruza com a biblioteca já hidratada.
+    const cat = await window.api.wemodCatalogGet().catch(() => null)
+    if (cat && cat.games.length > 0) {
+      set((s) => ({
+        wemodCatalog: cat.games,
+        wemodCatalogFetchedAt: cat.fetchedAt,
+        wemodSupported: buildWemodSupport(s.games, cat.games),
+      }))
+    }
+    // Proton padrão por launcher (launchers/<id>.json), sem rede.
+    set({ launcherProtons: await loadLauncherProtonsFromApi().catch(() => ({})) })
   },
   checkUpdate: async () => {
     set({ update: { state: "checking" } })
@@ -698,7 +735,7 @@ export const useStore = create<FliperamaState>((set, get) => ({
           window.api.steamGames(),
           window.api.steamStatus(),
           window.api.listProtons(),
-          window.api.listPrefixes(),
+          window.api.managedPrefixes(),
           window.api.isRunning(),
           window.api.getSystemStats(),
           window.api.hiddenGet(),
@@ -713,6 +750,8 @@ export const useStore = create<FliperamaState>((set, get) => ({
         window.api.authStatus("epic"),
         window.api.authStatus("gog"),
       ])
+      const wemodCat = await window.api.wemodCatalogGet().catch(() => null)
+      const catalog = wemodCat && wemodCat.games.length > 0 ? wemodCat.games : get().wemodCatalog
       set({
         launchers,
         games: [...steamFiltered, ...mapBackendGames(library, removedSet)],
@@ -726,8 +765,15 @@ export const useStore = create<FliperamaState>((set, get) => ({
         backends,
         downloads,
         auth: { epic: authEpic, gog: authGog },
+        wemodCatalog: catalog,
+        wemodCatalogFetchedAt: wemodCat?.fetchedAt ?? get().wemodCatalogFetchedAt,
+        wemodSupported: buildWemodSupport(
+          [...steamFiltered, ...mapBackendGames(library, removedSet)],
+          catalog
+        ),
         status: "ok",
       })
+      set({ launcherProtons: await loadLauncherProtonsFromApi().catch(() => ({})) })
     } catch (e) {
       set({ status: translate(get().locale, "common.error", { message: (e as Error).message }) })
     }
@@ -849,9 +895,9 @@ export const useStore = create<FliperamaState>((set, get) => ({
 
   playGame: async (game) => {
     try {
-      // Fling trainer: se ativado para o jogo E há um trainer na pasta que
+      // Trainer: se ativado para o jogo E há um trainer na pasta que
       // cruza com o nome, roda-o no prefixo do jogo junto do play.
-      if (get().flingTrainer.includes(game.id)) {
+      if (get().trainerEnabled.includes(game.id)) {
         const trainer = matchTrainer(game.name, get().trainerFiles)
         if (trainer) {
           let pref = game.prefix
@@ -864,7 +910,7 @@ export const useStore = create<FliperamaState>((set, get) => ({
           }
           if (pref) {
             void window.api.runTrainer(pref, trainer.path, []).catch((e) => {
-              console.error("[fling] trainer falhou:", (e as Error).message)
+              console.error("[trainer] falhou:", (e as Error).message)
             })
           }
         }
@@ -1009,14 +1055,27 @@ export const useStore = create<FliperamaState>((set, get) => ({
 
   setTrainerFiles: (trainerFiles) => set({ trainerFiles }),
 
-  setFlingTrainer: (id, on) => {
+  setTrainerEnabled: (id, on) => {
     set((s) => {
       const next = on
-        ? Array.from(new Set([...s.flingTrainer, id]))
-        : s.flingTrainer.filter((g) => g !== id)
+        ? Array.from(new Set([...s.trainerEnabled, id]))
+        : s.trainerEnabled.filter((g) => g !== id)
       try { localStorage.setItem("fliperama-fling-trainer", JSON.stringify(next)) } catch {}
-      return { flingTrainer: next }
+      return { trainerEnabled: next }
     })
+  },
+
+  applyWemodCatalog: (catalog, fetchedAt = null) =>
+    set((s) => ({
+      wemodCatalog: catalog,
+      wemodCatalogFetchedAt: fetchedAt,
+      wemodSupported: buildWemodSupport(s.games, catalog),
+    })),
+
+  // Proton padrão de execução/jogos por launcher ("" = auto → UMU-Proton).
+  setLauncherProton: (id, path) => {
+    set((s) => ({ launcherProtons: { ...s.launcherProtons, [id]: path } }))
+    void window.api.launcherConfigSet(id, { proton: path || null })
   },
 
   kill: async () => {

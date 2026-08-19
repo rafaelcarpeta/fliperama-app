@@ -15,7 +15,7 @@ function normFuzzy(s: string): string {
     .trim()
 }
 
-// Normaliza o nome do trainer removendo sufixos Fling comuns (versões, "Plus N
+// Normaliza o nome do trainer removendo sufixos comuns (versões, "Plus N
 // Trainer", "Updated", "+2 MrAntiFun", datas) para o match não depender deles.
 function cleanTrainerName(name: string): string {
   const base = name.replace(/\.exe$/i, "")

@@ -14,7 +14,9 @@ export default function Footer(): JSX.Element {
   const protons = useStore((s) => s.protons)
   const status = useStore((s) => s.status)
 
-  const active = launchers.find((l) => l.running)
+  // Prefixo exibido segue o mesmo conceito do "Launcher ativo": só
+  // launchers não-nativos (Steam nativo não tem prefixo Wine gerenciado).
+  const active = launchers.find((l) => l.running && !l.native)
   const selectedLauncher =
     selected?.kind === "launcher" ? launchers.find((l) => l.id === selected.id) : undefined
   const proton = protons.find((p) => !p.automatic) ?? protons[0]

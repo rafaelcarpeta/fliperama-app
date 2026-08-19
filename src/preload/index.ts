@@ -1,5 +1,20 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron"
 
+export interface WemodCatalogGame {
+  slug: string
+  name: string
+  cheats: number
+  platforms: string[]
+  updated: string
+  status: string
+}
+
+export interface WemodCatalog {
+  games: WemodCatalogGame[]
+  fetchedAt: number
+  stale?: boolean
+}
+
 export interface LauncherStatus {
   id: string
   name: string
@@ -38,6 +53,11 @@ export interface LauncherConfig {
   }
 }
 
+export interface SteamGameProtonInfo {
+  name: string | null
+  version: string | null
+}
+
 export interface ProtonInfo {
   name: string
   path: string | null
@@ -74,6 +94,10 @@ export interface PrefixEntry {
   path: string
   source: PrefixSource
   focused: boolean
+}
+
+export type ManagedPrefixEntry = Omit<PrefixEntry, "source"> & {
+  source: "fliperama" | "steam"
 }
 
 export interface TrainerExe {
@@ -306,6 +330,7 @@ const api = {
   listPrefixes: (): Promise<PrefixInfo[]> => ipcRenderer.invoke("prefixes:list"),
   getActivePrefix: (): Promise<string> => ipcRenderer.invoke("prefixes:active"),
   detectPrefixes: (): Promise<PrefixEntry[]> => ipcRenderer.invoke("prefixes:detect"),
+  managedPrefixes: (): Promise<ManagedPrefixEntry[]> => ipcRenderer.invoke("prefixes:managed"),
   getPrefixesDir: (): Promise<string> => ipcRenderer.invoke("prefixes:getDir"),
   pickPrefixesDir: (): Promise<string> => ipcRenderer.invoke("prefixes:pickDir"),
   resetPrefixesDir: (): Promise<string> => ipcRenderer.invoke("prefixes:resetDir"),
@@ -362,6 +387,13 @@ const api = {
     ipcRenderer.invoke("wemod:built:install", prefix),
   wemodBuiltStatus: (): Promise<{ hasRelease: boolean; installed: boolean }> =>
     ipcRenderer.invoke("wemod:built:status"),
+  wemodCatalogGet: (): Promise<WemodCatalog | null> => ipcRenderer.invoke("wemod:catalog:get"),
+  wemodCatalogRefresh: (): Promise<WemodCatalog> => ipcRenderer.invoke("wemod:catalog:refresh"),
+  onWemodCatalogUpdated: (cb: (c: WemodCatalog) => void): (() => void) => {
+    const handler = (_e: IpcRendererEvent, c: WemodCatalog): void => cb(c)
+    ipcRenderer.on("wemod:catalog:updated", handler)
+    return () => ipcRenderer.removeListener("wemod:catalog:updated", handler)
+  },
   wemodPlay: (
     game: {
       id: string
@@ -438,6 +470,8 @@ const api = {
   ): Promise<LauncherConfig> => ipcRenderer.invoke("launchers:config:set", id, patch),
   getSystemStats: (): Promise<SystemStats> => ipcRenderer.invoke("system:stats"),
   steamStatus: (): Promise<SteamStatus> => ipcRenderer.invoke("steam:status"),
+  steamGameProton: (appid: number | string): Promise<SteamGameProtonInfo | null> =>
+    ipcRenderer.invoke("steam:proton:game", appid),
   steamGames: (): Promise<SteamGame[]> => ipcRenderer.invoke("steam:games"),
   steamIndex: (): Promise<void> => ipcRenderer.invoke("steam:index"),
   steamInstall: (appid: number): Promise<{ pid: number | undefined }> =>
@@ -592,7 +626,7 @@ const api = {
     }
   },
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke("window:minimize"),
-  toggleFullscreen: (): Promise<void> => ipcRenderer.invoke("window:toggleFullscreen"),
+  toggleMaximize: (): Promise<void> => ipcRenderer.invoke("window:toggleMaximize"),
   closeWindow: (): Promise<void> => ipcRenderer.invoke("window:close"),
   restartApp: (): Promise<void> => ipcRenderer.invoke("app:restart"),
   appVersion: (): Promise<string> => ipcRenderer.invoke("app:version"),

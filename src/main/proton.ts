@@ -50,6 +50,17 @@ export function defaultProton(): string | undefined {
   return umu?.path ?? protons[0]?.path ?? undefined
 }
 
+// Proton usado SOMENTE para CRIAR prefixos: instalação de launchers e
+// prefixo inicial de jogos GOG. Fixo em UMU-Proton — é o único com
+// `compatibilitytool.vdf` no formato `compat_tools` aceito pelo umu-run
+// 1.4.3; GE/CachyOS (formato `installs`) quebram com `KeyError:
+// 'compat_tools'` na criação de prefixo. O proton padrão de JOGOS é definido
+// por launcher (launchers/<id>.json → `proton`), separado deste.
+// (Decisão 2026-08-18)
+export function installProton(): string | undefined {
+  return defaultProton()
+}
+
 export function setDefaultProton(path: string | undefined): void {
   if (!path) settings.setKey("defaultProton", "")
   else settings.setKey("defaultProton", path)

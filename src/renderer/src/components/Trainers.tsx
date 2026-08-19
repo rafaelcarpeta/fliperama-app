@@ -94,25 +94,6 @@ export default function Trainers(): JSX.Element {
       </div>
 
       <section className="settings-section">
-        <h3>{t("trainers.prefixos.title")}</h3>
-        <p className="muted">{t("trainers.selectPrefix")}</p>
-        <div className="field">
-          <select
-            className="input"
-            value={selectedPrefixPath}
-            disabled={prefixes.length === 0}
-            onChange={(e) => setSelectedPrefixPath(e.target.value)}
-          >
-            {prefixes.map((p) => (
-              <option key={p.path} value={p.path}>
-                {p.name} — {p.path}
-              </option>
-            ))}
-          </select>
-        </div>
-      </section>
-
-      <section className="settings-section">
         <h3>{t("trainers.section.title")}</h3>
         <div className="field">
           <label>{t("trainers.folder.label")}</label>
@@ -141,6 +122,21 @@ export default function Trainers(): JSX.Element {
 
       <section className="settings-section">
         <h3>{t("trainers.ce.title")}</h3>
+        <div className="field">
+          <label>{t("trainers.selectPrefix")}</label>
+          <select
+            className="input"
+            value={selectedPrefixPath}
+            disabled={prefixes.length === 0}
+            onChange={(e) => setSelectedPrefixPath(e.target.value)}
+          >
+            {prefixes.map((p) => (
+              <option key={p.path} value={p.path}>
+                {p.name} — {p.path}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="field">
           <label>{t("trainers.ce.path.label")}</label>
           <input

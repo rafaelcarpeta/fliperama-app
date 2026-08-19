@@ -29,6 +29,7 @@ import * as prefixDetect from "./prefixDetect"
 import * as prefixBackup from "./prefixBackup"
 import * as trainers from "./trainers"
 import * as wemod from "./wemod"
+import * as wemodCatalog from "./wemodCatalog"
 import * as wemodBuiltPrefix from "./wemodBuiltPrefix"
 import * as backends from "./backends"
 import * as auth from "./auth"
@@ -245,6 +246,12 @@ app.whenReady().then(() => {
   void backends.ensureAll((id, pct) => broadcast("backends:progress", { id, percent: pct }))
   setProgress(20, "Preparando…")
 
+  // Catálogo WeMod: atualiza em todo boot (fire-and-forget, nunca atrasa a
+  // janela) e notifica a UI quando chegar. Falha → usa o cache salvo.
+  void wemodCatalog.refreshCatalog().then((c) => {
+    if (c.games.length > 0) broadcast("wemod:catalog:updated", c)
+  })
+
   if (stress.STRESS) {
     stress.startDriftMonitor((drift, max) => {
       broadcast("stress:drift", { drift, max })
@@ -312,6 +319,7 @@ app.whenReady().then(() => {
   ipcMain.handle("protons:list", () => proton.listProtons())
   ipcMain.handle("protons:default:get", () => proton.defaultProton())
   ipcMain.handle("protons:default:set", (_e, path: string | null) => proton.setDefaultProton(path ?? undefined))
+  ipcMain.handle("steam:proton:game", (_e, appid: number | string) => prefixDetect.steamGameProton(appid))
   ipcMain.handle("protons:listRemote", () => protonManager.listRemote())
   ipcMain.handle("protons:download", async (_e, id: string) => {
     const progress = createThrottledEmitter((p: protonManager.ProtonProgress) =>
@@ -349,6 +357,7 @@ app.whenReady().then(() => {
     return ""
   })
   ipcMain.handle("prefixes:detect", () => prefixDetect.detectPrefixes())
+  ipcMain.handle("prefixes:managed", () => prefixDetect.managedPrefixes())
   ipcMain.handle("prefixes:getDir", () => prefix.rootDir())
   ipcMain.handle("prefixes:pickDir", async (e) => {
     const win = BrowserWindow.fromWebContents(e.sender)
@@ -461,6 +470,12 @@ app.whenReady().then(() => {
   ipcMain.handle("wemod:stop", (_e, prefix: string) => wemod.stopWemod(prefix))
   ipcMain.handle("wemod:status", (_e, prefix: string) => wemod.wemodStatus(prefix))
   ipcMain.handle("wemod:login:sync", (_e, prefix: string) => wemod.syncWemodLogin(prefix))
+  ipcMain.handle("wemod:catalog:get", () => wemodCatalog.getCachedCatalog())
+  ipcMain.handle("wemod:catalog:refresh", async () => {
+    const c = await wemodCatalog.refreshCatalog()
+    if (c.games.length > 0) broadcast("wemod:catalog:updated", c)
+    return c
+  })
 
   // ---- WeMod built prefix (W2) ----
   ipcMain.handle("wemod:built:install", async (_e, prefix: string) => {
@@ -500,11 +515,22 @@ app.whenReady().then(() => {
     }
 
     // 1) Pipeline do built prefix (.NET 4.8 via GitHub + merge inteligente).
+    // O built prefix é escolhido pelo Proton que RODA o prefixo (não o de
+    // instalação): GOG/Epic usam o default por launcher; Steam, o Proton lido
+    // do config_info do compatdata (o Steam decide).
+    const protonHint: wemodBuiltPrefix.ProtonHint | undefined =
+      store === "gog"
+        ? { path: launcherConfig.protonFor("gog") }
+        : store === "epic"
+          ? { path: launcherConfig.protonFor("epic") }
+          : store === "steam" && appid
+            ? ((await prefixDetect.steamGameProton(appid)) ?? undefined)
+            : undefined
     const progress = createThrottledEmitter((p: wemodBuiltPrefix.BuiltPrefixProgress) =>
       broadcast("wemod:play", { gameId: String(game.id || ""), stage: "built", ...p })
     )
     try {
-      await wemodBuiltPrefix.ensureBuiltPrefix(pref, (p) => progress.emit(p))
+      await wemodBuiltPrefix.ensureBuiltPrefix(pref, (p) => progress.emit(p), protonHint)
     } catch (err) {
       progress.flush()
       throw new Error(`preparação do WeMod falhou (jogo não iniciado): ${(err as Error).message}`)
@@ -548,9 +574,11 @@ app.whenReady().then(() => {
   ipcMain.handle("openPath", (_e, path: string) => shell.openPath(path))
   ipcMain.handle("system:stats", () => getSystemStats())
   ipcMain.handle("window:minimize", (e) => BrowserWindow.fromWebContents(e.sender)?.minimize())
-  ipcMain.handle("window:toggleFullscreen", (e) => {
+  ipcMain.handle("window:toggleMaximize", (e) => {
     const w = BrowserWindow.fromWebContents(e.sender)
-    if (w) w.setFullScreen(!w.isFullScreen())
+    if (!w) return
+    if (w.isMaximized()) w.unmaximize()
+    else w.maximize()
   })
   ipcMain.handle("window:close", (e) => BrowserWindow.fromWebContents(e.sender)?.close())
   ipcMain.handle("app:restart", () => {

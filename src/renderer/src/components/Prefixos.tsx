@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useStore } from "../store"
 import { useI18n } from "../i18n/useI18n"
+import { useClickOutside } from "../useClickOutside"
 
 export default function Prefixos(): JSX.Element {
   const { t } = useI18n()
@@ -11,11 +12,15 @@ export default function Prefixos(): JSX.Element {
   const [backups, setBackups] = useState<string[]>([])
 
   const [prefix, setPrefix] = useState<string>("")
+  const [prefixMenuOpen, setPrefixMenuOpen] = useState(false)
   const [exe, setExe] = useState<string>("")
   const [exeArgs, setExeArgs] = useState<string>("")
   const [reg, setReg] = useState<string>("")
+  const prefixMenuRef = useRef<HTMLDivElement | null>(null)
 
-  const selected = prefix || prefixes[0]?.path || ""
+  const selectedPrefix = prefixes.find((p) => p.path === prefix) ?? prefixes[0]
+  const selected = selectedPrefix?.path ?? ""
+  useClickOutside(prefixMenuRef, () => setPrefixMenuOpen(false), prefixMenuOpen)
 
   useEffect(() => {
     void window.api.backupList().then(setBackups).catch(() => undefined)
@@ -86,7 +91,14 @@ export default function Prefixos(): JSX.Element {
             <tbody>
               {prefixes.map((p) => (
                 <tr key={p.path}>
-                  <td>{p.name}</td>
+                  <td>
+                    <div className="managed-prefix-name">
+                      <span>{p.name}</span>
+                      <span className={`managed-prefix-source ${p.source}`}>
+                        {t(`prefixos.source.${p.source}`)}
+                      </span>
+                    </div>
+                  </td>
                   <td className="muted">{p.path}</td>
                   <td className="actions">
                     <button className="btn" onClick={() => void window.api.openPath(p.path)}>
@@ -95,9 +107,11 @@ export default function Prefixos(): JSX.Element {
                     <button className="btn" onClick={() => void backupPrefix(p.path)}>
                       {t("prefixos.btn.backup")}
                     </button>
-                    <button className="btn danger" onClick={() => void remove(p.name)}>
-                      {t("prefixos.btn.remove")}
-                    </button>
+                    {p.source === "fliperama" && (
+                      <button className="btn danger" onClick={() => void remove(p.name)}>
+                        {t("prefixos.btn.remove")}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -125,19 +139,49 @@ export default function Prefixos(): JSX.Element {
         <h3>{t("tools.title")}</h3>
         <p className="muted">{t("tools.prefix")}:</p>
         <div className="field">
-          <select
-            className="input"
-            value={selected}
-            disabled={prefixes.length === 0}
-            title={t("tools.prefix.title")}
-            onChange={(e) => setPrefix(e.target.value)}
-          >
-            {prefixes.map((p) => (
-              <option key={p.path} value={p.path}>
-                {p.name} — {p.path}
-              </option>
-            ))}
-          </select>
+          <div className="prefix-select" ref={prefixMenuRef}>
+            <button
+              type="button"
+              className={`prefix-select-trigger ${prefixMenuOpen ? "open" : ""}`}
+              disabled={prefixes.length === 0}
+              title={t("tools.prefix.title")}
+              role="combobox"
+              aria-expanded={prefixMenuOpen}
+              aria-haspopup="listbox"
+              onClick={() => setPrefixMenuOpen((open) => !open)}
+            >
+              <span className="prefix-select-copy">
+                <strong>{selectedPrefix?.name ?? t("prefixos.empty")}</strong>
+                {selectedPrefix && <small>{selectedPrefix.path}</small>}
+              </span>
+              <span className="prefix-select-caret" aria-hidden="true">⌄</span>
+            </button>
+            {prefixMenuOpen && (
+              <div className="prefix-select-menu" role="listbox" aria-label={t("tools.prefix")}>
+                {prefixes.map((p) => (
+                  <button
+                    type="button"
+                    key={p.path}
+                    role="option"
+                    aria-selected={p.path === selected}
+                    className={p.path === selected ? "active" : ""}
+                    onClick={() => {
+                      setPrefix(p.path)
+                      setPrefixMenuOpen(false)
+                    }}
+                  >
+                    <span className="prefix-select-option-head">
+                      <strong>{p.name}</strong>
+                      <span className={`managed-prefix-source ${p.source}`}>
+                        {t(`prefixos.source.${p.source}`)}
+                      </span>
+                    </span>
+                    <small>{p.path}</small>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="toolbar">

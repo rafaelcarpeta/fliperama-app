@@ -14,6 +14,7 @@ const actions = {
   "library-list": `document.querySelector(".library-head .page-tools > .ghost-btn:last-child")?.click()`,
   "library-filter": `document.querySelectorAll(".library-head .filter-wrap > .ghost-btn").item(1)?.click()`,
   "library-card-menu": `document.querySelector(".card .dots-btn")?.click()`,
+  "library-sinking-city-2": `document.querySelector('.card img[alt="The Sinking City 2"]')?.closest(".card")?.click()`,
   "view-launchers": `Array.from(document.querySelectorAll(".nav-item")).find((element) => element.textContent?.includes("Lançadores"))?.click()`,
   "view-store": `Array.from(document.querySelectorAll(".nav-item")).find((element) => element.textContent?.includes("Loja"))?.click()`,
   "view-settings": `Array.from(document.querySelectorAll(".nav-item")).find((element) => element.textContent?.includes("Configurações"))?.click()`,
@@ -30,6 +31,17 @@ app.whenReady().then(() => {
     if (!action) throw new Error(`Unknown capture state: ${state}`)
     await window.webContents.executeJavaScript(action)
     await new Promise((done) => setTimeout(done, 300))
+    const switchMetrics = await window.webContents.executeJavaScript(`Array.from(document.querySelectorAll(".switch")).map((button) => {
+      const knob = button.querySelector("i")
+      const buttonRect = button.getBoundingClientRect()
+      const knobRect = knob?.getBoundingClientRect()
+      return {
+        label: button.closest(".switch-row")?.querySelector("span")?.textContent,
+        button: { x: buttonRect.x, y: buttonRect.y, width: buttonRect.width, height: buttonRect.height },
+        knob: knobRect ? { x: knobRect.x, y: knobRect.y, width: knobRect.width, height: knobRect.height } : null,
+      }
+    })`)
+    console.log("[capture] switch metrics", JSON.stringify(switchMetrics))
     const image = await window.webContents.capturePage()
     const target = resolve(output)
     mkdirSync(dirname(target), { recursive: true })

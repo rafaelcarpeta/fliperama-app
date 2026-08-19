@@ -1590,7 +1590,7 @@ body {
   background: var(--fl-white-a06);
   border: 1px solid var(--fl-white-a12);
   cursor: pointer;
-  padding: var(--fl-space-3);
+  padding: 0;
   transition:
     background var(--fl-duration-fast) var(--fl-ease-standard),
     border-color var(--fl-duration-fast) var(--fl-ease-standard),
@@ -1599,8 +1599,11 @@ body {
 
 .switch i {
   display: block;
-  width: var(--fl-space-13);
-  height: var(--fl-space-13);
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: var(--fl-space-17);
+  height: var(--fl-space-17);
   border-radius: var(--fl-radius-round);
   background: var(--fl-content-secondary);
   transition: transform var(--fl-duration-fast) var(--fl-ease-standard);
@@ -1613,7 +1616,7 @@ body {
 
 .switch.on i {
   background: var(--fl-color-white);
-  transform: translateX(var(--fl-space-17));
+  transform: translateX(var(--fl-space-19));
 }
 
 .switch:hover:not(:disabled) {

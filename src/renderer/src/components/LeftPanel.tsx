@@ -23,7 +23,9 @@ export default function LeftPanel(): JSX.Element {
   const view = useStore((s) => s.view)
   const setView = useStore((s) => s.setView)
   const running = useStore((s) => s.running)
-  const active = useStore((s) => s.launchers.find((l) => l.running))
+  // "Launcher ativo" = launcher não-nativo (gerenciado via UMU/Proton);
+  // o Steam nativo fica de fora — ele é o cliente do sistema, não um launcher ativo.
+  const active = useStore((s) => s.launchers.find((l) => l.running && !l.native))
   const kill = useStore((s) => s.kill)
 
   return (

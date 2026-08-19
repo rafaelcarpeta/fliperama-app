@@ -1,11 +1,12 @@
 import { existsSync } from "node:fs"
-import { readdir, realpath, stat } from "node:fs/promises"
+import { realpath, stat } from "node:fs/promises"
 import { join } from "node:path"
 import { readFileSync } from "node:fs"
 import { getKey, setKey } from "./settings"
 import * as prefix from "./prefix"
-import { steamRoots } from "./steam"
+import { listInstalled, steamRoots } from "./steam"
 import { parseVdf } from "./vdf"
+import { isGameLike } from "./workers/normalize"
 
 export type PrefixSource = "fliperama" | "custom" | "steam"
 
@@ -15,6 +16,10 @@ export interface PrefixEntry {
   path: string
   source: PrefixSource
   focused: boolean
+}
+
+export type ManagedPrefixEntry = Omit<PrefixEntry, "source"> & {
+  source: "fliperama" | "steam"
 }
 
 export function getPrefixCustomPaths(): string[] {
@@ -87,53 +92,32 @@ async function steamLibraryFolders(): Promise<string[]> {
 let compatCache: { sig: string; prefixes: PrefixEntry[] } | null = null
 
 async function steamCompatDataPrefixes(): Promise<PrefixEntry[]> {
-  const dirs = await steamLibraryFolders()
+  const games = (await listInstalled()).filter(
+    (game) => game.steamappsDir && isGameLike(game.appid, game.name, "game")
+  )
   const sigParts: string[] = []
-  const scans: { steamapps: string; appids: string[] }[] = []
-  for (const steamapps of dirs) {
-    const compatRoot = join(steamapps, "compatdata")
-    let appids: string[] = []
+  for (const game of games) {
+    const pfx = join(game.steamappsDir!, "compatdata", String(game.appid), "pfx")
     try {
-      const entries = await readdir(compatRoot, { withFileTypes: true })
-      appids = entries
-        .filter((e) => e.isDirectory() && /^\d+$/.test(e.name))
-        .map((e) => e.name)
-        .sort()
+      sigParts.push(`${game.appid}:${game.name}:${(await stat(pfx)).mtimeMs}`)
     } catch {
-      continue
+      sigParts.push(`${game.appid}:${game.name}:0`)
     }
-    const parts = [`${steamapps}:${appids.length}`]
-    try {
-      parts.push(`root:${(await stat(compatRoot)).mtimeMs}`)
-    } catch {
-      parts.push("root:0")
-    }
-    for (const appid of appids) {
-      try {
-        parts.push(`${appid}:${(await stat(join(compatRoot, appid))).mtimeMs}`)
-      } catch {
-        parts.push(`${appid}:0`)
-      }
-    }
-    sigParts.push(parts.join(","))
-    scans.push({ steamapps, appids })
   }
   const sig = sigParts.join("|")
   if (compatCache && compatCache.sig === sig) return compatCache.prefixes
 
   const prefixes: PrefixEntry[] = []
-  for (const { steamapps, appids } of scans) {
-    for (const appid of appids) {
-      const pfx = join(steamapps, "compatdata", appid, "pfx")
-      if (!existsSync(join(pfx, "drive_c"))) continue
-      prefixes.push({
-        id: `steam:${appid}`,
-        name: `Steam ${appid}`,
-        path: pfx,
-        source: "steam",
-        focused: false,
-      })
-    }
+  for (const game of games) {
+    const pfx = join(game.steamappsDir!, "compatdata", String(game.appid), "pfx")
+    if (!existsSync(join(pfx, "drive_c"))) continue
+    prefixes.push({
+      id: `steam:${game.appid}`,
+      name: game.name,
+      path: pfx,
+      source: "steam",
+      focused: false,
+    })
   }
   compatCache = { sig, prefixes }
   return prefixes
@@ -168,6 +152,52 @@ export async function detectPrefixes(): Promise<PrefixEntry[]> {
 
   const hidden = new Set(getPrefixHidden())
   return out.filter((p) => !hidden.has(p.id) && !hidden.has(p.path))
+}
+
+export async function managedPrefixes(): Promise<ManagedPrefixEntry[]> {
+  return (await detectPrefixes()).filter(
+    (p): p is ManagedPrefixEntry => p.source === "fliperama" || p.source === "steam"
+  )
+}
+
+export interface SteamGameProtonInfo {
+  // Nome do diretório do Proton (ex.: "Proton - Experimental",
+  // "GE-Proton11-3", "proton-cachyos-slr") — extraído dos paths de
+  // config_info que apontam para <proton>/files/...
+  name: string | null
+  // Primeira linha do config_info (ex.: "11.0-100", "CachyOS-11.0-100").
+  version: string | null
+}
+
+// Proton que o cliente Steam usou para o jogo, lido de
+// <compatdata>/<appid>/config_info: linha 1 = versão; as linhas de path
+// (…/files/share/fonts/…) revelam o nome do diretório do Proton.
+// Read-only — o Proton de jogos Steam é gerenciado pelo próprio Steam.
+// Retorna null quando o jogo nunca rodou / não usa compatibility tool.
+export async function steamGameProton(appid: number | string): Promise<SteamGameProtonInfo | null> {
+  const steamapps = await steamLibraryFolders()
+  for (const dir of steamapps) {
+    const cfg = join(dir, "compatdata", String(appid), "config_info")
+    if (!existsSync(cfg)) continue
+    try {
+      const lines = readFileSync(cfg, "utf8").split(/\r?\n/)
+      const version = (lines[0] ?? "").trim() || null
+      let name: string | null = null
+      for (const line of lines) {
+        const idx = line.indexOf("/files/")
+        if (idx <= 0) continue
+        const base = line.slice(0, idx).split(/[\\/]/).filter(Boolean).pop()
+        if (base) {
+          name = base
+          break
+        }
+      }
+      if (version || name) return { name, version }
+    } catch {
+      // config_info ilegível — segue para a próxima library
+    }
+  }
+  return null
 }
 
 // Resolve o caminho do prefixo (pfx) de um appid Steam (compatdata), mesmo que

@@ -19,6 +19,14 @@ const execFileAsync = promisify(execFile)
 const REPO = "rafaelcarpeta/Action-Shark"
 const RELEASES_URL = `https://api.github.com/repos/${REPO}/releases`
 
+// Fonte principal alinhada ao Proton: release do fliperamabr com os built
+// prefixes por Proton (GE-Proton11-5, CachyOS, Experimental). Queda para o
+// Action-Shark apenas para o fallback GE-Proton10.1.
+const FLIPERAMA_REPO = "rafaelcarpeta/fliperamabr"
+const FLIPERAMA_TAG = "built-prefixes-v1"
+const FLIPERAMA_RELEASE_URL = `https://api.github.com/repos/${FLIPERAMA_REPO}/releases/tags/${FLIPERAMA_TAG}`
+const FALLBACK_ASSET = "GE-Proton10.1.zip"
+
 export function builtPrefixDir(): string {
   const dir = join(wemod.wemodDataDir(), "built_prefixes")
   try {
@@ -104,44 +112,144 @@ async function fetchBuiltPrefixReleases(): Promise<GhRelease[]> {
   return (await res.json()) as GhRelease[]
 }
 
-// Compara "PfxVer11.1" ou "PfxVer10.0" — escolhe o release cujo prefixo bate
-// com a Proton do prefixo destino. Heurística: parse do PfxVer{N}.{M} do
-// asset/zip, ou fallback para a versão mais recente.
-function findClosestCompatibleRelease(releases: GhRelease[]): GhRelease {
-  for (const r of releases) {
-    const ver = /PfxVer(\d+)\.(\d+)/.exec(r.tag_name) ?? /PfxVer(\d+)\.(\d+)/.exec(r.name ?? "")
-    if (ver) return r
-  }
-  return releases[0]
+// ---- seleção do built prefix alinhada ao Proton ----
+
+// Hint do Proton efetivo que vai RODAR o prefixo (não o de instalação):
+// - GOG/Epic: PROTONPATH do default por launcher (launcherConfig.protonFor);
+// - Steam: nome/versão lidos do config_info do compatdata (steamGameProton).
+export interface ProtonHint {
+  path?: string
+  // Aceita null (SteamGameProtonInfo devolve null quando não detectado).
+  name?: string | null
+  version?: string | null
 }
 
-function pickZipAsset(release: GhRelease): { name: string; url: string; size: number } {
-  const a = release.assets.find((x) => /\.zip$/i.test(x.name))
-  if (!a) throw new Error(`release ${release.tag_name} sem asset .zip`)
-  return { name: a.name, url: a.browser_download_url, size: a.size }
+interface ProtonClass {
+  family: "ge" | "cachyos" | "experimental" | "umu" | "other"
+  major: number | null
+  minor: number | null
+}
+
+const FAMILY_RE: [RegExp, ProtonClass["family"]][] = [
+  [/cachyos/i, "cachyos"],
+  [/experimental/i, "experimental"],
+  [/ge[-_\s]?proton/i, "ge"],
+  [/umu/i, "umu"],
+]
+
+function classifyProton(hint: ProtonHint): ProtonClass {
+  const raw = [
+    hint.path ? (hint.path.split(/[\/]/).filter(Boolean).pop() ?? "") : "",
+    hint.name ?? "",
+  ].join(" ")
+  const versionRaw = [raw, hint.version ?? ""].join(" ")
+  let family: ProtonClass["family"] = "other"
+  for (const [re, fam] of FAMILY_RE) {
+    if (re.test(raw)) {
+      family = fam
+      break
+    }
+  }
+  const m = /(\d+)[.-](\d+)/.exec(versionRaw)
+  return { family, major: m ? Number(m[1]) : null, minor: m ? Number(m[2]) : null }
+}
+
+// Pontua zip vs hint: família manda (100), versão aproxima (major +10 / -3 por
+// major de diferença, minor -1 por unidade). UMU/other caem na família GE
+// (base Proton 10 → GE-Proton10.1 vence por versão).
+function scoreZip(zipClass: ProtonClass, hintClass: ProtonClass): number {
+  let score = 0
+  if (zipClass.family === hintClass.family) score += 100
+  else if ((hintClass.family === "umu" || hintClass.family === "other") && zipClass.family === "ge") {
+    score += 50
+  }
+  if (zipClass.major != null && hintClass.major != null) {
+    score += zipClass.major === hintClass.major ? 10 : -3 * Math.abs(zipClass.major - hintClass.major)
+    if (zipClass.major === hintClass.major && zipClass.minor != null && hintClass.minor != null) {
+      score -= Math.abs(zipClass.minor - hintClass.minor)
+    }
+  }
+  return score
+}
+
+interface PickedAsset {
+  name: string
+  url: string | null
+  zipPath?: string
+  source: "cache" | "fliperamabr" | "actionshark"
+  score: number
+}
+
+async function fetchFliperamaRelease(): Promise<GhRelease> {
+  const res = await fetch(FLIPERAMA_RELEASE_URL, {
+    headers: { "User-Agent": "Fliperama/0.1 (Electron)", Accept: "application/vnd.github+json" },
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!res.ok) throw new Error(`GitHub API respondeu ${res.status} para ${FLIPERAMA_REPO}`)
+  return (await res.json()) as GhRelease
+}
+
+function isFallbackAsset(name: string): boolean {
+  return name.toLowerCase().endsWith(FALLBACK_ASSET.toLowerCase())
+}
+
+// Escolhe o built prefix para o Proton: cache local do Fliperama → release do
+// fliperamabr → fallback GE-Proton10.1 (Action-Shark) quando nada casa.
+async function pickBuiltPrefixAsset(hint?: ProtonHint): Promise<PickedAsset> {
+  const hc = classifyProton(hint ?? {})
+  const cands: PickedAsset[] = []
+  for (const f of readdirSyncSafe(builtPrefixDir())) {
+    if (!/\.zip$/i.test(f)) continue
+    const zipPath = join(builtPrefixDir(), f)
+    cands.push({ name: f, url: null, zipPath, source: "cache", score: scoreZip(classifyProton({ name: f }), hc) })
+  }
+  try {
+    const rel = await fetchFliperamaRelease()
+    for (const a of rel.assets ?? []) {
+      if (!/\.zip$/i.test(a.name)) continue
+      cands.push({ name: a.name, url: a.browser_download_url, source: "fliperamabr", score: scoreZip(classifyProton({ name: a.name }), hc) })
+    }
+  } catch {
+    // release indisponível — segue com cache / fallback
+  }
+  if (cands.length > 0) {
+    cands.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
+    const best = cands[0]
+    if (best.score > 0) return best
+    const fb = cands.find((c) => isFallbackAsset(c.name))
+    return fb ?? best
+  }
+  // Nada em cache/release → Action-Shark (fallback GE-Proton10.1).
+  const releases = await fetchBuiltPrefixReleases()
+  const all = releases.flatMap((rel) => rel.assets ?? [])
+  const fallback = all.find((a) => isFallbackAsset(a.name)) ?? all.find((a) => /\.zip$/i.test(a.name))
+  if (!fallback) throw new Error("nenhum built prefix disponível (cache, fliperamabr ou Action-Shark)")
+  return { name: fallback.name, url: fallback.browser_download_url, source: "actionshark", score: 0 }
 }
 
 // ---- download ----
 
 export async function downloadBuiltPrefix(
-  onProgress?: (p: BuiltPrefixProgress) => void
+  onProgress?: (p: BuiltPrefixProgress) => void,
+  hint?: ProtonHint
 ): Promise<{ zipPath: string; release: string }> {
   onProgress?.({ phase: "release", percent: 5 })
-  const releases = await fetchBuiltPrefixReleases()
-  if (releases.length === 0) throw new Error("nenhuma release disponível no GitHub")
-  const release = findClosestCompatibleRelease(releases)
-  const asset = pickZipAsset(release)
-
-  const dest = join(builtPrefixDir(), asset.name)
-  if (existsSync(dest)) {
-    onProgress?.({ phase: "done", percent: 100, release: release.tag_name })
-    return { zipPath: dest, release: release.tag_name }
+  const pick = await pickBuiltPrefixAsset(hint)
+  const dest = join(builtPrefixDir(), pick.name)
+  if (pick.source === "cache" && pick.zipPath && existsSync(pick.zipPath)) {
+    onProgress?.({ phase: "done", percent: 100, release: pick.name })
+    return { zipPath: pick.zipPath, release: pick.name }
   }
+  if (existsSync(dest)) {
+    onProgress?.({ phase: "done", percent: 100, release: pick.name })
+    return { zipPath: dest, release: pick.name }
+  }
+  if (!pick.url) throw new Error(`built prefix em cache inválido: ${pick.name}`)
 
-  onProgress?.({ phase: "download", percent: 10, release: release.tag_name })
-  const tmp = join(builtPrefixDir(), `.tmp-${Date.now()}-${asset.name}`)
+  onProgress?.({ phase: "download", percent: 10, release: pick.name })
+  const tmp = join(builtPrefixDir(), `.tmp-${Date.now()}-${pick.name}`)
   try {
-    const res = await fetch(asset.url, { redirect: "follow" })
+    const res = await fetch(pick.url, { redirect: "follow" })
     if (!res.ok) throw new Error(`download falhou: ${res.status} ${res.statusText}`)
     if (!res.body) throw new Error("resposta sem corpo")
     const total = Number(res.headers.get("content-length") ?? 0)
@@ -150,12 +258,12 @@ export async function downloadBuiltPrefix(
       received += chunk.length
       if (total > 0) {
         const pct = 10 + Math.round((received / total) * 60)
-        onProgress?.({ phase: "download", percent: Math.min(pct, 70), release: release.tag_name })
+        onProgress?.({ phase: "download", percent: Math.min(pct, 70), release: pick.name })
       }
     })
     await pipeline(rs, createWriteStream(tmp))
 
-    onProgress?.({ phase: "extract", percent: 75, release: release.tag_name })
+    onProgress?.({ phase: "extract", percent: 75, release: pick.name })
     await mkdir(dest, { recursive: true })
     await execFileAsync("unzip", ["-o", "-q", tmp, "-d", dest], { timeout: 0 }).catch(
       async () => {
@@ -163,13 +271,12 @@ export async function downloadBuiltPrefix(
         await execFileAsync("7z", ["x", "-y", `-o${dest}`, tmp], { timeout: 0 })
       }
     )
-    onProgress?.({ phase: "done", percent: 100, release: release.tag_name })
-    return { zipPath: dest, release: release.tag_name }
+    onProgress?.({ phase: "done", percent: 100, release: pick.name })
+    return { zipPath: dest, release: pick.name }
   } finally {
     await rm(tmp, { force: true }).catch(() => undefined)
   }
 }
-
 // ---- merge inteligente ----
 
 // Overrides DX native que quebrariam Proton (idem _is_skipped_dx_override do
@@ -333,14 +440,15 @@ async function copyDirContents(src: string, dst: string): Promise<void> {
 
 export async function ensureBuiltPrefix(
   prefix: string,
-  onProgress?: (p: BuiltPrefixProgress) => Promise<void> | void
+  onProgress?: (p: BuiltPrefixProgress) => Promise<void> | void,
+  protonHint?: ProtonHint
 ): Promise<void> {
   onProgress?.({ phase: "verify", percent: 0 })
   if (await isDotnet48Installed(prefix)) {
     onProgress?.({ phase: "skipped", percent: 100 })
     return
   }
-  const { zipPath } = await downloadBuiltPrefix((p) => onProgress?.(p))
+  const { zipPath } = await downloadBuiltPrefix((p) => onProgress?.(p), protonHint)
   onProgress?.({ phase: "merge", percent: 85 })
   // O zipPath pode ter subpastas; achar a pasta com system.reg ou drive_c.
   const builtRoot = await locateBuiltRoot(zipPath)

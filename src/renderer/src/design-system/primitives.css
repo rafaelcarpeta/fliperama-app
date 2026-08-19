@@ -115,10 +115,10 @@
 .fl-switch::after {
   content: "";
   position: absolute;
-  top: var(--fl-space-3);
-  left: var(--fl-space-3);
-  width: var(--fl-space-13);
-  height: var(--fl-space-13);
+  top: 1px;
+  left: 1px;
+  width: var(--fl-space-17);
+  height: var(--fl-space-17);
   border-radius: var(--fl-radius-round);
   background: var(--fl-content-secondary);
   transition: transform var(--fl-duration-fast) var(--fl-ease-standard);
@@ -126,7 +126,7 @@
 .fl-switch:hover:not(:disabled) { border-color: var(--fl-pink-a24); }
 .fl-switch[aria-pressed="true"] { background: var(--fl-gradient-brand); border-color: var(--fl-accent-brand); }
 .fl-switch[aria-pressed="true"]::after { background: var(--fl-color-white); }
-.fl-switch[aria-pressed="true"]::after { transform: translateX(var(--fl-space-17)); }
+.fl-switch[aria-pressed="true"]::after { transform: translateX(var(--fl-space-19)); }
 .fl-switch:disabled { cursor: not-allowed; opacity: 0.4; }
 
 .fl-progress { height: 8px; overflow: hidden; border-radius: var(--fl-radius-pill); background: var(--fl-white-a07); }

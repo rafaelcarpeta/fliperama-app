@@ -92,7 +92,7 @@ export default function Topbar(): JSX.Element {
               <path d="M1 6h10" stroke="currentColor" strokeWidth="1" />
             </svg>
           </button>
-          <button className="win-btn" title={t("window.maximize")} onClick={() => void window.api.toggleFullscreen()}>
+          <button className="win-btn" title={t("window.maximize")} onClick={() => void window.api.toggleMaximize()}>
             <svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor">
               <rect x="2" y="2" width="8" height="8" rx="0" />
             </svg>
