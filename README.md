@@ -60,10 +60,10 @@ npm run publish:server  # build + scp + validação sha512/HTTP no servidor
 
 Pipeline de release: `bump version` → `npm run publish:server`
 (`scripts/publish-server.sh` faz build, scp, conferindo sha512 e HTTP 200).
-Sem GitHub Releases — o `latest-linux.yml` mora no servidor e o feed é lido
-diretamente pelo `electron-updater`.
+O **app não é publicado via GitHub Releases** — o `latest-linux.yml` mora no
+servidor e o feed é lido diretamente pelo `electron-updater`.
 
-Release atual: **v0.2.0** — [AppImage](https://files.fliperama.top/fliperama/Fliperama-0.2.0.AppImage) · [feed](https://files.fliperama.top/fliperama/latest-linux.yml).
+Release atual: **v0.3.0** — [AppImage](https://files.fliperama.top/fliperama/Fliperama-0.3.0.AppImage) · [feed](https://files.fliperama.top/fliperama/latest-linux.yml).
 
 Configuração em `package.json`:
 
@@ -73,6 +73,44 @@ Configuração em `package.json`:
   "artifactName": "Fliperama-${version}.${ext}"
 }
 ```
+
+### GitHub Releases: prefixos pré-configurados (não são o app)
+
+As releases do repositório no GitHub — como
+[built-prefixes-v1](https://github.com/rafaelcarpeta/fliperamabr/releases/tag/built-prefixes-v1) —
+**não são o aplicativo** e não são usadas pelo `electron-updater`. Elas
+contêm **prefixos Wine pré-configurados** (built prefixes) que o Fliperama
+baixa em runtime.
+
+**Finalidade**
+
+Cada zip é um prefixo Wine já preparado contendo:
+
+- **.NET Framework 4.8** instalado (`registry NDP` + `Microsoft.NET` +
+  DLLs de runtime em `drive_c/windows`);
+- **instalador WeMod** embutido (marcador `.wemod_installer`).
+
+Quando um jogo entra no fluxo WeMod e o prefixo dele ainda não tem .NET 4.8,
+o Fliperama baixa o built prefix **correspondente ao Proton que vai rodar o
+jogo** e faz um *merge inteligente* no prefixo destino: copia apenas o
+essencial (registry `NDP` + `drive_c/windows`), ignorando os overrides DX
+nativos (`d3d11`, `d3d12`, `dxgi`, `d3d9`, `mscoree`) para não
+quebrar o Proton do jogo.
+
+**Alinhamento por Proton**
+
+| Proton do jogo | Built prefix usado |
+|---|---|
+| GE-Proton (ex.: GE-Proton11-3 / 11-5) | `GE-Proton11-5.zip` |
+| Proton Experimental (Steam ou launcher) | `Proton-Experimental-11.0-20260814b.zip` |
+| CachyOS Proton (Steam ou launcher) | `proton-cachyos-11.0-20260703-slr-x86_64.zip` |
+| UMU-Proton (default) ou sem correspondência | `GE-Proton10.1.zip` (fallback, do repositório de origem) |
+
+A escolha vem do `config_info` do compatdata para jogos Steam ou do default
+de Proton configurado por launcher (GOG/Epic/...); a busca é **cache local →
+release do fliperamabr → fallback**. Por isso esses arquivos só fazem sentido
+junto do app: baixar e usar um deles manualmente exige descompactar dentro de
+um prefixo Wine existente — sozinhos, não são instaláveis nem executáveis.
 
 ## Servidor de arquivos (`note`)
 
